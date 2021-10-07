@@ -1,0 +1,12 @@
+torch
+tensorflow
+
+numpy
+scikit-learn
+pandas
+
+matplotlib
+seaborn
+
+tqdm
+wandb
