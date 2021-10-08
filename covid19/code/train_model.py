@@ -19,11 +19,17 @@ EPOCHS1 = 10
 EPOCHS2 = 15
 BATCH_SIZE = 32
 IMAGE_SIZE = (256, 256)
-BASE_PATH = "/home/scarrion/datasets/covid19"
+BASE_PATH = "/home/scarrion/datasets/covid19/80-10-10"
 
 # Load csv
-df_train = pd.read_csv(os.path.join(BASE_PATH, "new_train.csv"))
-df_test = pd.read_csv(os.path.join(BASE_PATH, "new_test.csv"))
+df_train = pd.read_csv(os.path.join(BASE_PATH, "train_data.csv"))
+df_val = pd.read_csv(os.path.join(BASE_PATH, "val_data.csv"))
+df_test = pd.read_csv(os.path.join(BASE_PATH, "test_data.csv"))
+
+# # Cast targets
+# df_train['covid'] = df_train['covid'].astype(str)
+# df_val['covid'] = df_val['covid'].astype(str)
+# df_test['covid'] = df_test['covid'].astype(str)
 
 train_da = ImageDataGenerator(
     rescale=1./255,
@@ -37,13 +43,25 @@ train_da = ImageDataGenerator(
     cval=0,
     horizontal_flip=False,
     validation_split=0.1)
+val_da = ImageDataGenerator(rescale=1./255)
 test_da = ImageDataGenerator(rescale=1./255)
 
 train_ds = train_da.flow_from_dataframe(
     df_train,
     os.path.join(BASE_PATH, "images"),
     x_col="filepath",
-    y_col="covid",
+    y_col="class",
+    target_size=IMAGE_SIZE,
+    batch_size=BATCH_SIZE,
+    class_mode='binary',
+    # color_mode="grayscale",
+    classes=["covid", "no_covid"],
+)
+val_ds = train_da.flow_from_dataframe(
+    df_val,
+    os.path.join(BASE_PATH, "images"),
+    x_col="filepath",
+    y_col="class",
     target_size=IMAGE_SIZE,
     batch_size=BATCH_SIZE,
     class_mode='binary',
@@ -54,11 +72,11 @@ test_ds = train_da.flow_from_dataframe(
     df_test,
     os.path.join(BASE_PATH, "images"),
     x_col="filepath",
-    y_col="covid",
+    y_col="class",
     target_size=IMAGE_SIZE,
     batch_size=BATCH_SIZE,
     class_mode='binary',
-    color_mode="grayscale",
+    # color_mode="grayscale",
     classes=["covid", "no_covid"],
 )
 id2lbl = {v: k for k, v in train_ds.class_indices.items()}
@@ -101,7 +119,7 @@ my_callbacks = [
 model.compile(optimizer=Adam(learning_rate=1e-3), loss='categorical_crossentropy', metrics=["accuracy"])
 
 # train the model on the new data for a few epochs
-history1 = model.fit(train_ds, validation_data=test_ds, epochs=EPOCHS1, callbacks=my_callbacks, shuffle=True)
+history1 = model.fit(train_ds, validation_data=val_ds, epochs=EPOCHS1, callbacks=my_callbacks, shuffle=True)
 
 # let's visualize layer names and layer indices to see how many layers
 # we should freeze:
