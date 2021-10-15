@@ -6,11 +6,8 @@ import collections
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 
-
-BASE_PATH = "/home/scarrion/datasets/covid19/80-10-10"
-# BASE_PATH = "/home/scarrion/datasets/covid19/70-15-15"
+BASE_PATH = "/home/scarrion/datasets/covid19/all-covid"
 df = pd.read_csv(os.path.join(BASE_PATH, "ecvl_bimcv_covid19.tsv"), delimiter='\t')
-df["covid"] = None
 print(BASE_PATH)
 
 # Remove duplicates
@@ -29,7 +26,6 @@ for i, row in df.iterrows():
     if os.path.exists(os.path.join(BASE_PATH, "images", fname)):
         df.loc[i, "filepath"] = fname
         df.loc[i, "class"] = "no_covid" if "normal" in row["labels"] else "covid"
-        df.loc[i, "split2"] = "test" if df.loc[i, "split"] == "test" else "training"
     else:
         df.drop(i, inplace=True)
 total_rows2 = len(df)
@@ -43,31 +39,32 @@ df_train = df[df.split == "training"]
 df_val = df[df.split == "validation"]
 df_test = df[df.split == "test"]
 
-print(f"Partitions:")
+print(f"Partitions: {len(df_train)+len(df_val)+len(df_test)}")
 print(f"- Training: {len(df_train)}")
-print(f"\t- Covid: {len(df_train[df_train['covid'] == 1])}")
-print(f"\t- No covid: {len(df_train[df_train['covid'] == 0])}")
+print(f"\t- Covid: {len(df_train[df_train['class'] == 'covid'])}")
+print(f"\t- No covid: {len(df_train[df_train['class'] == 'no_covid'])}")
 print(f"")
 print(f"- Validation: {len(df_val)}")
-print(f"\t- Covid: {len(df_val[df_val['covid'] == 1])}")
-print(f"\t- No covid: {len(df_val[df_val['covid'] == 0])}")
+print(f"\t- Covid: {len(df_val[df_val['class'] == 'covid'])}")
+print(f"\t- No covid: {len(df_val[df_val['class'] == 'no_covid'])}")
 print(f"")
 print(f"- Test: {len(df_test)}")
-print(f"\t- Covid: {len(df_test[df_test['covid'] == 1])}")
-print(f"\t- No covid: {len(df_test[df_test['covid'] == 0])}")
+print(f"\t- Covid: {len(df_test[df_test['class'] == 'covid'])}")
+print(f"\t- No covid: {len(df_test[df_test['class'] == 'no_covid'])}")
 print(f"")
 
 # Save CSV
 df_train.to_csv(os.path.join(BASE_PATH, "train_data.csv"), index=False)
 df_val.to_csv(os.path.join(BASE_PATH, "val_data.csv"), index=False)
 df_test.to_csv(os.path.join(BASE_PATH, "test_data.csv"), index=False)
+print("Files saved!")
 
 # View images
-df_covid = df[df["covid"] == True][:5]
-df_nocovid = df[df["covid"] == False][:5]
-df2 = pd.concat([df_covid, df_nocovid], axis=0)
-df2 = df2.sample(frac=1)
-
+# df_covid = df[df["class"] == 'covid'][:5]
+# df_nocovid = df[df["class"] == 'no_covid'][:5]
+# df2 = pd.concat([df_covid, df_nocovid], axis=0)
+# df2 = df2.sample(frac=1)
+#
 # for i, (index, row) in enumerate(df2.iterrows()):
 #     img_path = os.path.join(BASE_PATH, "images", row["filepath"])
 #     img = mpimg.imread(img_path)

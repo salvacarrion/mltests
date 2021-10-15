@@ -15,11 +15,16 @@ from keras_preprocessing.image import ImageDataGenerator
 from tensorflow.python.client import device_lib
 print(device_lib.list_local_devices())
 
-EPOCHS1 = 10
+import wandb
+from wandb.keras import WandbCallback
+wandb.init(project='covid19', entity='salvacarrion')
+
+EPOCHS1 = 2
 EPOCHS2 = 15
 BATCH_SIZE = 32
 IMAGE_SIZE = (256, 256)
 BASE_PATH = "/home/scarrion/datasets/covid19/80-10-10"
+CATEGORIES = ["covid", "no_covid"]
 
 # Load csv
 df_train = pd.read_csv(os.path.join(BASE_PATH, "train_data.csv"))
@@ -53,9 +58,9 @@ train_ds = train_da.flow_from_dataframe(
     y_col="class",
     target_size=IMAGE_SIZE,
     batch_size=BATCH_SIZE,
-    class_mode='binary',
+    class_mode='categorical',
     # color_mode="grayscale",
-    classes=["covid", "no_covid"],
+    classes=CATEGORIES,
 )
 val_ds = train_da.flow_from_dataframe(
     df_val,
@@ -64,9 +69,8 @@ val_ds = train_da.flow_from_dataframe(
     y_col="class",
     target_size=IMAGE_SIZE,
     batch_size=BATCH_SIZE,
-    class_mode='binary',
-    # color_mode="grayscale",
-    classes=["covid", "no_covid"],
+    class_mode='categorical',
+    classes=CATEGORIES,
 )
 test_ds = train_da.flow_from_dataframe(
     df_test,
@@ -75,21 +79,20 @@ test_ds = train_da.flow_from_dataframe(
     y_col="class",
     target_size=IMAGE_SIZE,
     batch_size=BATCH_SIZE,
-    class_mode='binary',
-    # color_mode="grayscale",
-    classes=["covid", "no_covid"],
+    class_mode='categorical',
+    classes=CATEGORIES,
 )
 id2lbl = {v: k for k, v in train_ds.class_indices.items()}
 
-# # Preview images
-# plt.figure(figsize=(10, 10))
-# for images, labels in [train_ds.next()]:
-#     for i in range(9):
-#         ax = plt.subplot(3, 3, i + 1)
-#         plt.imshow((images[i]*255).astype("uint8"), vmin=0, vmax=255, cmap="gray")
-#         plt.title(id2lbl.get(int(labels[i]), "unknown"))
-#         plt.axis("off")
-#     plt.show()
+# Preview images
+plt.figure(figsize=(10, 10), dpi=300)
+for images, labels in [train_ds.next()]:
+    for i in range(9):
+        ax = plt.subplot(3, 3, i + 1)
+        plt.imshow((images[i]*255).astype("uint8"), vmin=0, vmax=255, cmap="gray")
+        plt.title(id2lbl.get(int(labels[i].argmax()), "unknown"))
+        plt.axis("off")
+    plt.show()
 
 # Create network
 base_model = VGG16(weights='imagenet', include_top=False, input_shape=(*IMAGE_SIZE, 3), classes=2)
@@ -97,7 +100,7 @@ x = base_model.output
 x = Flatten()(x)
 x = Dense(512, activation='relu')(x)
 x = Dropout(0.5)(x)
-outputs = Dense(1, activation='softmax')(x)
+outputs = Dense(2, activation='softmax')(x)
 model = Model(inputs=base_model.input, outputs=outputs)
 
 # Freeze top layers
@@ -109,6 +112,7 @@ for i, layer in enumerate(model.layers):
     print(i, layer.name, layer.trainable)
 
 my_callbacks = [
+    WandbCallback(),
     tf.keras.callbacks.EarlyStopping(patience=10),
     tf.keras.callbacks.ModelCheckpoint(filepath='model.{epoch:02d}-{val_loss:.2f}.h5'),
     tf.keras.callbacks.TensorBoard(log_dir='./logs'),
@@ -128,14 +132,12 @@ for i, layer in enumerate(base_model.layers):
 
 # we chose to train the top 2 inception blocks, i.e. we will freeze
 # the first 249 layers and unfreeze the rest:
-for layer in model.layers[:249]:
-   layer.trainable = False
-for layer in model.layers[249:]:
+for layer in model.layers:
    layer.trainable = True
 
 # we need to recompile the model for these modifications to take effect
 # we use SGD with a low learning rate
-model.compile(optimizer=SGD(lr=0.0001, momentum=0.9), loss='categorical_crossentropy', metrics=["accuracy"])
+model.compile(optimizer=SGD(learning_rate=0.0001, momentum=0.9), loss='categorical_crossentropy', metrics=["accuracy"])
 
 # we train our model again (this time fine-tuning the top 2 inception blocks
 # alongside the top Dense layers
