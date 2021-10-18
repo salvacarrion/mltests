@@ -62,6 +62,7 @@ class Dataset:
             mask = np.array(Image.open(self.masks_fps[i]))[..., 0]
 
         # # Keep originals (just for visualization)
+        original_image = original_mask = None
         if self.show_originals:
             original_image = np.array(image)
             original_mask = np.array(mask)
