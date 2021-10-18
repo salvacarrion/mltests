@@ -8,6 +8,10 @@ import matplotlib.image as mpimg
 
 BASE_PATH = "/home/scarrion/datasets/covid19/all-covid"
 df = pd.read_csv(os.path.join(BASE_PATH, "ecvl_bimcv_covid19.tsv"), delimiter='\t')
+df["symptoms"] = 0
+df["infiltrates"] = 0
+df["pneumonia"] = 0
+df["covid19"] = 0
 print(BASE_PATH)
 
 # Remove duplicates
@@ -25,14 +29,18 @@ for i, row in df.iterrows():
     # Drop row if the file does not exists
     if os.path.exists(os.path.join(BASE_PATH, "images", fname)):
         df.loc[i, "filepath"] = fname
-        df.loc[i, "class"] = "no_covid" if "normal" in row["labels"] else "covid"
+        # df.loc[i, "class"] = "no_covid" if "normal" in row["labels"] else "covid"
+        df.loc[i, "infiltrates"] = 1 if "infiltrates" in df.loc[i, "labels"].lower() else 0
+        df.loc[i, "pneumonia"] = 1 if "pneumonia" in df.loc[i, "labels"].lower() else 0
+        df.loc[i, "covid19"] = 1 if "covid" in df.loc[i, "labels"].lower() else 0
+        df.loc[i, "symptoms"] = 1 if (df.loc[i, "infiltrates"] or df.loc[i, "pneumonia"] or df.loc[i, "covid19"]) else 0
     else:
         df.drop(i, inplace=True)
 total_rows2 = len(df)
 print(f"Images not found: {total_rows1-total_rows2}")
 
 # Shuffle
-df = df.sample(frac=1)
+df = df.sample(frac=1, random_state=1234)
 
 # Split files
 df_train = df[df.split == "training"]
@@ -41,22 +49,35 @@ df_test = df[df.split == "test"]
 
 print(f"Partitions: {len(df_train)+len(df_val)+len(df_test)}")
 print(f"- Training: {len(df_train)}")
-print(f"\t- Covid: {len(df_train[df_train['class'] == 'covid'])}")
-print(f"\t- No covid: {len(df_train[df_train['class'] == 'no_covid'])}")
+print(f"\t- Infiltrates: {len(df_train[df_train['infiltrates'] == 1])}")
+print(f"\t- No Infiltrates: {len(df_train[df_train['infiltrates'] == 0])}")
+print(f"\t- Pneumonia: {len(df_train[df_train['pneumonia'] == 1])}")
+print(f"\t- No Pneumonia: {len(df_train[df_train['pneumonia'] == 0])}")
+print(f"\t- Covid19: {len(df_train[df_train['covid19'] == 1])}")
+print(f"\t- No Covid19: {len(df_train[df_train['covid19'] == 0])}")
 print(f"")
 print(f"- Validation: {len(df_val)}")
-print(f"\t- Covid: {len(df_val[df_val['class'] == 'covid'])}")
-print(f"\t- No covid: {len(df_val[df_val['class'] == 'no_covid'])}")
+print(f"\t- Infiltrates: {len(df_val[df_val['infiltrates'] == 1])}")
+print(f"\t- No Infiltrates: {len(df_val[df_val['infiltrates'] == 0])}")
+print(f"\t- Pneumonia: {len(df_val[df_val['pneumonia'] == 1])}")
+print(f"\t- No Pneumonia: {len(df_val[df_val['pneumonia'] == 0])}")
+print(f"\t- Covid19: {len(df_val[df_val['covid19'] == 1])}")
+print(f"\t- No Covid19: {len(df_val[df_val['covid19'] == 0])}")
 print(f"")
 print(f"- Test: {len(df_test)}")
-print(f"\t- Covid: {len(df_test[df_test['class'] == 'covid'])}")
-print(f"\t- No covid: {len(df_test[df_test['class'] == 'no_covid'])}")
+print(f"\t- Infiltrates: {len(df_test[df_test['infiltrates'] == 1])}")
+print(f"\t- No Infiltrates: {len(df_test[df_test['infiltrates'] == 0])}")
+print(f"\t- Pneumonia: {len(df_test[df_test['pneumonia'] == 1])}")
+print(f"\t- No Pneumonia: {len(df_test[df_test['pneumonia'] == 0])}")
+print(f"\t- Covid19: {len(df_test[df_test['covid19'] == 1])}")
+print(f"\t- No Covid19: {len(df_test[df_test['covid19'] == 0])}")
 print(f"")
 
 # Save CSV
 df_train.to_csv(os.path.join(BASE_PATH, "train_data.csv"), index=False)
 df_val.to_csv(os.path.join(BASE_PATH, "val_data.csv"), index=False)
 df_test.to_csv(os.path.join(BASE_PATH, "test_data.csv"), index=False)
+df.to_csv(os.path.join(BASE_PATH, "all_data.csv"), index=False)
 print("Files saved!")
 
 # View images
