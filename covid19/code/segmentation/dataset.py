@@ -16,10 +16,10 @@ class Dataset:
         images_dir (str): path to images folder
         masks_dir (str): path to segmentation masks folder
         class_values (list): values of classes to extract from segmentation mask
-        augmentation (albumentations.Compose): data transfromation pipeline
+        da_fn (albumentations.Compose): data transfromation pipeline
             (e.g. flip, scale, etc.)
-        preprocessing (albumentations.Compose): data preprocessing
-            (e.g. noralization, shape manipulation, etc.)
+        preprocess_fn (albumentations.Compose): data preprocessing
+            (e.g. normalization, shape manipulation, etc.)
 
     """
 
@@ -28,10 +28,9 @@ class Dataset:
             df,
             imgs_dir,
             masks_dir,
-            augmentation=None,
-            preprocessing=None,
+            da_fn=None,
+            preprocess_fn=None,
             target_size=None,
-            show_originals=False,
             memory_map=True,
     ):
         self.ids = list(df["filepath"])
@@ -47,12 +46,11 @@ class Dataset:
         # convert str names to class values on masks
         self.CLASSES = ["lungs"]
 
-        self.augmentation = augmentation
-        self.preprocessing = preprocessing
+        self.da_fn = da_fn
+        self.preprocess_fn = preprocess_fn
         self.target_size = target_size
-        self.show_originals = show_originals
 
-    def __getitem__(self, i):
+    def __getitem__(self, i, show_originals=False):
         # Read/Load data
         if self.memory_map:
             image = self.mem_images[i]
@@ -63,18 +61,18 @@ class Dataset:
 
         # # Keep originals (just for visualization)
         original_image = original_mask = None
-        if self.show_originals:
+        if show_originals:
             original_image = np.array(image)
             original_mask = np.array(mask)
 
         # apply augmentations
-        if self.augmentation:
-            sample = self.augmentation(image=image, mask=mask)
+        if self.da_fn:
+            sample = self.da_fn(image=image, mask=mask)
             image, mask = sample['image'], sample['mask']
 
         # apply preprocessing
-        if self.preprocessing:
-            sample = self.preprocessing(image=image, mask=mask)
+        if self.preprocess_fn:
+            sample = self.preprocess_fn(image=image, mask=mask)
             image, mask = sample['image'], sample['mask']
 
         # Convert images
@@ -85,7 +83,7 @@ class Dataset:
         assert image.shape[:2] == self.target_size
         assert mask.shape[:2] == self.target_size
 
-        if self.show_originals:
+        if show_originals:
             return image, mask, original_image, original_mask
         else:
             return image, mask
