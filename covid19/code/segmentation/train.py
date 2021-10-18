@@ -32,7 +32,7 @@ train_dataset = Dataset(df_train, imgs_dir=imgs_dir, masks_dir=masks_dir, augmen
 val_dataset = Dataset(df_val, imgs_dir=imgs_dir, masks_dir=masks_dir, augmentation=get_validation_augmentation(), preprocessing=get_preprocessing(preprocess_input), target_size=IMAGE_SIZE)
 test_dataset = Dataset(df_test, imgs_dir=imgs_dir, masks_dir=masks_dir, augmentation=get_validation_augmentation(), preprocessing=get_preprocessing(preprocess_input), target_size=IMAGE_SIZE)
 
-# # Visualize image
+# Visualize image
 # for i in range(10):
 #     image, mask, original_image, original_mask = train_dataset[5]  # get some sample
 #     visualize(
@@ -65,10 +65,10 @@ model.compile(optimizer=Adam(learning_rate=1e-3), loss=bce_jaccard_loss, metrics
 
 # train the model on the new data for a few epochs
 print("Training decoder first...")
-history1 = model.fit(train_dataloader, validation_data=val_dataloader, epochs=EPOCHS1, callbacks=my_callbacks)
+history1 = model.fit(train_dataloader, validation_data=val_dataloader, epochs=EPOCHS1, callbacks=my_callbacks, use_multiprocessing=USE_MULTIPROCESSING, workers=NUM_WORKERS)
 print("Initial training results:")
 print(history1)
-plot_hist(history1, savepath=os.path.join(OUTPUT_PATH, "plots"), suffix="_initial")
+plot_hist(history1, title="Training decoder", savepath=os.path.join(OUTPUT_PATH, "plots"), suffix="_initial")
 
 # we need to recompile the model for these modifications to take effect
 # we use SGD with a low learning rate
@@ -78,10 +78,10 @@ model.compile(optimizer=SGD(learning_rate=1e-4, momentum=0.9), loss=bce_jaccard_
 
 # we train our model again (this time fine-tuning the top 2 inception blocks
 # alongside the top Dense layers
-history2 = model.fit(train_dataloader, validation_data=val_dataloader, epochs=EPOCHS2, callbacks=my_callbacks)
+history2 = model.fit(train_dataloader, validation_data=val_dataloader, epochs=EPOCHS2, callbacks=my_callbacks, use_multiprocessing=USE_MULTIPROCESSING, workers=NUM_WORKERS)
 print("Fine-tuning results:")
 print(history2)
-plot_hist(history2, savepath=os.path.join(OUTPUT_PATH, "plots"), suffix="_finetuning")
+plot_hist(history2, title="Finetuning whole model", savepath=os.path.join(OUTPUT_PATH, "plots"), suffix="_finetuning")
 
 # Save model
 print("Saving model...")

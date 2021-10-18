@@ -133,7 +133,8 @@ def get_training_augmentation(target_size=(256, 256)):
     height, width = target_size
     train_transform = [
         A.HorizontalFlip(p=0.5),
-        A.GaussNoise(var_limit=(5, 25), p=0.3),
+        A.Perspective(scale=(0.025, 0.04), p=0.2),
+        A.ShiftScaleRotate(scale_limit=0.10, rotate_limit=7, shift_limit=0.10, border_mode=cv2.BORDER_CONSTANT, p=0.8),
         A.RandomResizedCrop(height=height, width=width, scale=(0.9, 1.0), p=0.3),
 
         A.OneOf(
@@ -141,6 +142,7 @@ def get_training_augmentation(target_size=(256, 256)):
                 A.CLAHE(p=1),
                 A.RandomBrightness(p=1),
                 A.RandomGamma(p=1),
+                A.RandomContrast(limit=0.2, p=1.0),
             ],
             p=0.8,
         ),
@@ -149,22 +151,14 @@ def get_training_augmentation(target_size=(256, 256)):
             [
                 A.Sharpen(alpha=(0.2, 0.5), lightness=(0.5, 1.0), p=1.0),
                 A.Blur(blur_limit=[2, 3], p=1.0),
+                A.GaussNoise(var_limit=(5, 25), p=1.0),
                 # A.MotionBlur(blur_limit=3, p=1.0),
             ],
-            p=0.8,
+            p=1.0,
         ),
 
-        A.OneOf(
-            [
-                A.RandomContrast(limit=0.2, p=1.0),
-                A.HueSaturationValue(hue_shift_limit=20, sat_shift_limit=30, val_shift_limit=20, p=1.0),
-            ],
-            p=0.8,
-        ),
         A.Lambda(image=negative, p=0.2),
 
-        A.Perspective(scale=(0.025, 0.04), p=0.2),
-        A.ShiftScaleRotate(scale_limit=0.10, rotate_limit=7, shift_limit=0.10, border_mode=cv2.BORDER_CONSTANT, p=0.8),
         A.LongestMaxSize(max_size=max(height, width), always_apply=True),
         A.PadIfNeeded(min_height=height, min_width=width, border_mode=cv2.BORDER_CONSTANT, always_apply=True),
     ]
@@ -199,20 +193,25 @@ def get_preprocessing(preprocessing_fn):
     return A.Compose(_transform)
 
 
-def plot_hist(history, savepath, suffix=""):
+def plot_hist(history, title="", savepath=None, suffix=""):
     # Plot training & validation iou_score values
     plt.figure(figsize=(30, 5))
+
+    # Set title
+    plt.title(title)
+
     plt.subplot(121)
     plt.plot(history.history['iou_score'])
     plt.plot(history.history['val_iou_score'])
-    plt.title('Model iou_score')
-    plt.ylabel('iou_score')
+    plt.title('Model IoU')
+    plt.ylabel('IoU score')
     plt.xlabel('Epoch')
-    plt.legend(['Train', 'Test'], loc='upper left')
+    plt.legend(['Train', 'Val'], loc='upper left')
 
     # Save figures
-    plt.savefig(os.path.join(savepath, f"iou{suffix}.pdf"))
-    plt.savefig(os.path.join(savepath, f"iou{suffix}.png"))
+    if savepath:
+        plt.savefig(os.path.join(savepath, f"iou{suffix}.pdf"))
+        plt.savefig(os.path.join(savepath, f"iou{suffix}.png"))
 
     # Plot training & validation loss values
     plt.subplot(122)
@@ -221,11 +220,12 @@ def plot_hist(history, savepath, suffix=""):
     plt.title('Model loss')
     plt.ylabel('Loss')
     plt.xlabel('Epoch')
-    plt.legend(['Train', 'Test'], loc='upper left')
+    plt.legend(['Train', 'Val'], loc='upper left')
 
     # Save figures
-    plt.savefig(os.path.join(savepath, f"loss{suffix}.pdf"))
-    plt.savefig(os.path.join(savepath, f"loss{suffix}.png"))
+    if savepath:
+        plt.savefig(os.path.join(savepath, f"loss{suffix}.pdf"))
+        plt.savefig(os.path.join(savepath, f"loss{suffix}.png"))
 
     # Show
     plt.show()

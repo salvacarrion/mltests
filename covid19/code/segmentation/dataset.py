@@ -31,10 +31,18 @@ class Dataset:
             augmentation=None,
             preprocessing=None,
             target_size=None,
+            show_originals=False,
+            memory_map=True,
     ):
         self.ids = list(df["filepath"])
         self.images_fps = [os.path.join(imgs_dir, image_id) for image_id in self.ids]
         self.masks_fps = [os.path.join(masks_dir, image_id) for image_id in self.ids]
+
+        # Load images in memory (minor speed-up)
+        self.memory_map = memory_map
+        if self.memory_map:
+            self.mem_images = [np.array(Image.open(self.images_fps[i])) for i in range(len(self.ids))]
+            self.mem_masks = [np.array(Image.open(self.masks_fps[i]))[..., 0] for i in range(len(self.ids))]
 
         # convert str names to class values on masks
         self.CLASSES = ["lungs"]
@@ -42,15 +50,21 @@ class Dataset:
         self.augmentation = augmentation
         self.preprocessing = preprocessing
         self.target_size = target_size
+        self.show_originals = show_originals
 
     def __getitem__(self, i):
-        # read data
-        image = np.array(Image.open(self.images_fps[i]))
-        mask = np.array(Image.open(self.masks_fps[i]))[..., 0]
+        # Read/Load data
+        if self.memory_map:
+            image = self.mem_images[i]
+            mask = self.mem_masks[i]
+        else:
+            image = np.array(Image.open(self.images_fps[i]))
+            mask = np.array(Image.open(self.masks_fps[i]))[..., 0]
 
         # # Keep originals (just for visualization)
-        # original_image = np.array(image)
-        # original_mask = np.array(mask)
+        if self.show_originals:
+            original_image = np.array(image)
+            original_mask = np.array(mask)
 
         # apply augmentations
         if self.augmentation:
@@ -66,10 +80,14 @@ class Dataset:
         image = np.stack((image,)*3, axis=-1)  # Grayscale to RGB
         mask = mask.astype(np.bool).astype(np.float32)
 
+        # Check shapes
         assert image.shape[:2] == self.target_size
         assert mask.shape[:2] == self.target_size
 
-        return image, mask #, original_image, original_mask
+        if self.show_originals:
+            return image, mask, original_image, original_mask
+        else:
+            return image, mask
 
     def __len__(self):
         return len(self.ids)
