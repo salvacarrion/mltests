@@ -1,41 +1,53 @@
-import os.path
+import os
+import time
+from pathlib import Path
 
 import tensorflow as tf
 from tensorflow.keras.optimizers import SGD, Adam
 
 import segmentation_models as sm
-from segmentation_models import Unet
 from segmentation_models.utils import set_trainable
-from segmentation_models import get_preprocessing
 from segmentation_models.losses import bce_jaccard_loss
 from segmentation_models.metrics import iou_score
 
 from covid19.code.segmentation.utils import *
-from covid19.code.segmentation.dataset import Dataset, Dataloder
+from covid19.code.segmentation.dataset import DatasetMasks, DataloaderMasks
 
 # Fix sm
 sm.set_framework('tf.keras')
 sm.framework()
 
+RUN_NAME = f"resnet34_1"
 
-def train(train_dataset, val_dataset, batch_size, backbone, epochs1, epochs2,
-          checkpoints_path, last_checkpoint_path=None, logs_path=None, plots_path=None,
-          use_multiprocessing=False, workers=1):
+
+def get_model(backbone):
+    if backbone == "resnet34":
+        from segmentation_models import Unet
+        model = Unet("resnet34", encoder_weights='imagenet', classes=1, activation='sigmoid', encoder_freeze=True)
+        prep_fn = preprocessing_fn(custom_fn=sm.get_preprocessing("resnet34"))
+        return model, prep_fn
+
+    else:
+        raise ValueError("Unknown backbone")
+
+
+def train(model, train_dataset, val_dataset, batch_size, epochs1, epochs2,
+          checkpoints_path=None, last_checkpoint_path=None, logs_path=None,
+          plots_path=None, use_multiprocessing=False, workers=1):
     # Build dataloaders
-    train_dataloader = Dataloder(train_dataset, batch_size=batch_size, shuffle=True)
-    val_dataloader = Dataloder(val_dataset, batch_size=batch_size, shuffle=False)
+    train_dataloader = DataloaderMasks(train_dataset, batch_size=batch_size, shuffle=True)
+    val_dataloader = DataloaderMasks(val_dataset, batch_size=batch_size, shuffle=False)
     
     # Callbacks
     model_callbacks = [
         tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=1e-5),
         tf.keras.callbacks.EarlyStopping(patience=10),
-        tf.keras.callbacks.ModelCheckpoint(filepath=checkpoints_path, save_best_only=True, mode='min'),
+        # tf.keras.callbacks.ModelCheckpoint(filepath=checkpoints_path, save_best_only=True, mode='min'),  # It can make the end of an epoch extremely slow
         tf.keras.callbacks.TensorBoard(log_dir=logs_path),
         # WandbCallback(),
     ]
 
     # define model
-    model = Unet(backbone, encoder_weights='imagenet', classes=1, activation='sigmoid', encoder_freeze=True)
     model.summary()
     
     # Compile the model
@@ -74,7 +86,7 @@ def train(train_dataset, val_dataset, batch_size, backbone, epochs1, epochs2,
 
 def test(test_dataset, model_path, batch_size):
     # Build dataloader
-    test_dataloader = Dataloder(test_dataset, batch_size=batch_size, shuffle=False)
+    test_dataloader = DataloaderMasks(test_dataset, batch_size=batch_size, shuffle=False)
     
     # Load model
     print("Loading model...")
@@ -92,20 +104,17 @@ def test(test_dataset, model_path, batch_size):
     return scores
     
 
-def get_datasets(filename, images_dir, masks_dir, backbone, target_size):
+def get_datasets(filename, images_dir, masks_dir, target_size, prep_fn=None):
     # Get data
     df_train, df_val, df_test = get_splits(filename=filename, filter_masks=True,
                                            masks_path=os.path.join(masks_dir, "*.png"))
 
-    # Preprocessing
-    prep_fn = preprocessing_fn(custom_fn=sm.get_preprocessing(backbone))
-
     # Build dataset
-    train_dataset = Dataset(df_train, imgs_dir=images_dir, masks_dir=masks_dir, da_fn=tr_da_fn(*target_size),
+    train_dataset = DatasetMasks(df_train, imgs_dir=images_dir, masks_dir=masks_dir, da_fn=tr_da_fn(*target_size),
                             preprocess_fn=prep_fn, target_size=target_size)
-    val_dataset = Dataset(df_val, imgs_dir=images_dir, masks_dir=masks_dir, da_fn=ts_da_fn(*target_size),
+    val_dataset = DatasetMasks(df_val, imgs_dir=images_dir, masks_dir=masks_dir, da_fn=ts_da_fn(*target_size),
                           preprocess_fn=prep_fn, target_size=target_size)
-    test_dataset = Dataset(df_test, imgs_dir=images_dir, masks_dir=masks_dir, da_fn=ts_da_fn(*target_size),
+    test_dataset = DatasetMasks(df_test, imgs_dir=images_dir, masks_dir=masks_dir, da_fn=ts_da_fn(*target_size),
                            preprocess_fn=prep_fn, target_size=target_size)
     
     return train_dataset, val_dataset, test_dataset
@@ -122,22 +131,31 @@ def visualize(dataset, i, n=5):
         )
 
 
-def main(batch_size=32, backbone="resnet34", epochs1=1, epochs2=1, base_path=".", output_path=".",
+def main(batch_size=32, backbone="resnet34", epochs1=100, epochs2=200, base_path=".", output_path=".",
          target_size=(256, 256), use_multiprocessing=True, workers=8, train_model=True, test_model=True,
          show_samples=False):
     # Vars
     filename_csv = os.path.join(base_path, "data.csv")
     images_dir = os.path.join(base_path, "images256")
     masks_dir = os.path.join(base_path, "masks256")
-    checkpoints_path = os.path.join(output_path, "models")
-    last_checkpoint_path = os.path.join(checkpoints_path, "my_last_model2.h5")
-    logs_path = os.path.join(output_path, "logs")
-    plots_path = os.path.join(output_path, "plots")
+
+    # Outputs
+    checkpoints_path = os.path.join(output_path, RUN_NAME, "models")
+    last_checkpoint_path = None  #os.path.join(checkpoints_path, "last_model.h5")
+    logs_path = os.path.join(output_path, RUN_NAME, "logs")
+    plots_path = os.path.join(output_path, RUN_NAME, "plots")
+
+    # Create folders
+    for dir_i in [checkpoints_path, logs_path, plots_path]:
+        Path(dir_i).mkdir(parents=True, exist_ok=True)
+
+    # Get model + auxiliar functions
+    model, prep_fn = get_model(backbone=backbone)
 
     # Get data
     train_dataset, val_dataset, test_dataset = get_datasets(filename=filename_csv,
                                                             images_dir=images_dir, masks_dir=masks_dir,
-                                                            backbone=backbone, target_size=target_size)
+                                                            target_size=target_size, prep_fn=prep_fn)
 
     # Visualize
     if show_samples:
@@ -145,7 +163,7 @@ def main(batch_size=32, backbone="resnet34", epochs1=1, epochs2=1, base_path="."
 
     # Train
     if train_model:
-        train(train_dataset, val_dataset, batch_size=batch_size, backbone=backbone, epochs1=epochs1, epochs2=epochs2,
+        train(model, train_dataset, val_dataset, batch_size=batch_size, epochs1=epochs1, epochs2=epochs2,
               checkpoints_path=checkpoints_path, last_checkpoint_path=last_checkpoint_path, logs_path=logs_path,
               plots_path=plots_path, use_multiprocessing=use_multiprocessing, workers=workers)
 
@@ -156,9 +174,9 @@ def main(batch_size=32, backbone="resnet34", epochs1=1, epochs2=1, base_path="."
     
 if __name__ == "__main__":
     BASE_PATH = "/home/scarrion/datasets/covid19/front"
-    OUTPUT_PATH = "/home/scarrion/projects/mltests/covid19/code/.outputs"
+    OUTPUT_PATH = "/home/scarrion/projects/mltests/covid19/code/segmentation/.outputs"
 
     # Run
-    main(train_model=True, test_model=True, show_samples=True, base_path=BASE_PATH, output_path=OUTPUT_PATH)
+    main(train_model=True, test_model=True, show_samples=False, base_path=BASE_PATH, output_path=OUTPUT_PATH)
     print("Done!")
 

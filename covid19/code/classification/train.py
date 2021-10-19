@@ -1,148 +1,186 @@
 import os
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-
+import time
+import datetime
+from pathlib import Path
 import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras import layers
-from tensorflow.keras.layers import Dense, Flatten, Dropout, GlobalMaxPooling2D
-from tensorflow.keras.models import Model
-from tensorflow.keras.applications import VGG16
 from tensorflow.keras.optimizers import SGD, Adam
-from keras_preprocessing.image import ImageDataGenerator
+from tensorflow.keras.losses import BinaryCrossentropy
+from tensorflow.keras.metrics import BinaryAccuracy
 
-from tensorflow.python.client import device_lib
-print(device_lib.list_local_devices())
 
-import wandb
-from wandb.keras import WandbCallback
-wandb.init(project='covid19', entity='salvacarrion')
+from covid19.code.classification.da import *
+from covid19.code.classification.utils import *
+from covid19.code.classification.dataset import *
 
-EPOCHS1 = 2
-EPOCHS2 = 15
-BATCH_SIZE = 32
-IMAGE_SIZE = (256, 256)
-BASE_PATH = "/home/scarrion/datasets/covid19/80-10-10"
-CATEGORIES = ["covid", "no_covid"]
+RUN_NAME = f"resnet50_1"
 
-# Load csv
-df_train = pd.read_csv(os.path.join(BASE_PATH, "train_data.csv"))
-df_val = pd.read_csv(os.path.join(BASE_PATH, "val_data.csv"))
-df_test = pd.read_csv(os.path.join(BASE_PATH, "test_data.csv"))
 
-# # Cast targets
-# df_train['covid'] = df_train['covid'].astype(str)
-# df_val['covid'] = df_val['covid'].astype(str)
-# df_test['covid'] = df_test['covid'].astype(str)
+def get_model(backbone):
 
-train_da = ImageDataGenerator(
-    rescale=1./255,
-    zoom_range=0.05,
-    rotation_range=3,
-    shear_range=0.01,
-    width_shift_range=[-0.05, +0.05],
-    height_shift_range=[-0.05, +0.05],
-    brightness_range=[0.95, 1.05],
-    fill_mode="constant",
-    cval=0,
-    horizontal_flip=False,
-    validation_split=0.1)
-val_da = ImageDataGenerator(rescale=1./255)
-test_da = ImageDataGenerator(rescale=1./255)
+    if backbone == "resnet50":
+        from tensorflow.keras.applications.resnet50 import ResNet50
+        from tensorflow.keras.applications.resnet50 import preprocess_input, decode_predictions
 
-train_ds = train_da.flow_from_dataframe(
-    df_train,
-    os.path.join(BASE_PATH, "images"),
-    x_col="filepath",
-    y_col="class",
-    target_size=IMAGE_SIZE,
-    batch_size=BATCH_SIZE,
-    class_mode='categorical',
-    # color_mode="grayscale",
-    classes=CATEGORIES,
-)
-val_ds = train_da.flow_from_dataframe(
-    df_val,
-    os.path.join(BASE_PATH, "images"),
-    x_col="filepath",
-    y_col="class",
-    target_size=IMAGE_SIZE,
-    batch_size=BATCH_SIZE,
-    class_mode='categorical',
-    classes=CATEGORIES,
-)
-test_ds = train_da.flow_from_dataframe(
-    df_test,
-    os.path.join(BASE_PATH, "images"),
-    x_col="filepath",
-    y_col="class",
-    target_size=IMAGE_SIZE,
-    batch_size=BATCH_SIZE,
-    class_mode='categorical',
-    classes=CATEGORIES,
-)
-id2lbl = {v: k for k, v in train_ds.class_indices.items()}
+        # Define model
+        base_model = ResNet50(include_top=True, weights="imagenet")
 
-# Preview images
-plt.figure(figsize=(10, 10), dpi=300)
-for images, labels in [train_ds.next()]:
-    for i in range(9):
-        ax = plt.subplot(3, 3, i + 1)
-        plt.imshow((images[i]*255).astype("uint8"), vmin=0, vmax=255, cmap="gray")
-        plt.title(id2lbl.get(int(labels[i].argmax()), "unknown"))
-        plt.axis("off")
-    plt.show()
+        # Define inputs/ouputs
+        inputs = tf.keras.layers.Input(shape=(224, 224, 3))  # Same as base_model
+        x = base_model(inputs)
+        outputs = tf.keras.layers.Dense(1, activation='sigmoid')(x)
+        model = tf.keras.Model(inputs, outputs)
+        return model, preprocess_input, decode_predictions
 
-# Create network
-base_model = VGG16(weights='imagenet', include_top=False, input_shape=(*IMAGE_SIZE, 3), classes=2)
-x = base_model.output
-x = Flatten()(x)
-x = Dense(512, activation='relu')(x)
-x = Dropout(0.5)(x)
-outputs = Dense(2, activation='softmax')(x)
-model = Model(inputs=base_model.input, outputs=outputs)
+    else:
+        raise ValueError("Unknown backbone")
 
-# Freeze top layers
-for layer in base_model.layers:
-    layer.trainable = False
 
-# Make sure you have frozen the correct layers
-for i, layer in enumerate(model.layers):
-    print(i, layer.name, layer.trainable)
+def train(model, train_dataset, val_dataset, batch_size, epochs1, epochs2,
+          checkpoints_path=None, last_checkpoint_path=None, logs_path=None,
+          plots_path=None, use_multiprocessing=False, workers=1):
+    # Build dataloaders
+    train_dataloader = Dataloader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_dataloader = Dataloader(val_dataset, batch_size=batch_size, shuffle=False)
+    
+    # Callbacks
+    model_callbacks = [
+        tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=1e-5),
+        tf.keras.callbacks.EarlyStopping(patience=10),
+        # tf.keras.callbacks.ModelCheckpoint(filepath=checkpoints_path, save_best_only=True, mode='min'),  # It can make the end of an epoch extremely slow
+        tf.keras.callbacks.TensorBoard(log_dir=logs_path),
+        # WandbCallback(),
+    ]
 
-my_callbacks = [
-    WandbCallback(),
-    tf.keras.callbacks.EarlyStopping(patience=10),
-    tf.keras.callbacks.ModelCheckpoint(filepath='model.{epoch:02d}-{val_loss:.2f}.h5'),
-    tf.keras.callbacks.TensorBoard(log_dir='./logs'),
-    tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=1e-5)
-]
+    # Print model
+    model.summary()
+    
+    # Compile the model
+    model.compile(optimizer=Adam(learning_rate=1e-3), loss=BinaryCrossentropy(from_logits=True), metrics=[BinaryAccuracy()])
 
-# Compile the model
-model.compile(optimizer=Adam(learning_rate=1e-3), loss='categorical_crossentropy', metrics=["accuracy"])
+    for batch in train_dataloader:
+        asdas = 3
 
-# train the model on the new data for a few epochs
-history1 = model.fit(train_ds, validation_data=val_ds, epochs=EPOCHS1, callbacks=my_callbacks, shuffle=True)
+    # train the model on the new data for a few epochs
+    print("Training decoder first...")
+    history1 = model.fit(train_dataloader, validation_data=val_dataloader, epochs=epochs1, callbacks=model_callbacks,
+                         use_multiprocessing=use_multiprocessing, workers=workers)
+    print("Initial training results:")
+    print(history1)
+    if plots_path:
+        plot_hist(history1, title="Training decoder", savepath=plots_path, suffix="_initial")
+    
+    # we need to recompile the model for these modifications to take effect
+    # we use SGD with a low learning rate
+    print("Fine-tuning model...")
+    model.compile(optimizer=SGD(learning_rate=1e-4, momentum=0.9), loss=BinaryCrossentropy(from_logits=True), metrics=[BinaryAccuracy()])
+    
+    # we train our model again (this time fine-tuning the top 2 inception blocks
+    # alongside the top Dense layers
+    history2 = model.fit(train_dataloader, validation_data=val_dataloader, epochs=epochs2, callbacks=model_callbacks,
+                         use_multiprocessing=use_multiprocessing, workers=workers)
+    print("Fine-tuning results:")
+    print(history2)
+    if plots_path:
+        plot_hist(history2, title="Fine-tuning full model", savepath=plots_path, suffix="_finetuning")
+    
+    # Save model
+    if last_checkpoint_path:
+        print("Saving last model...")
+        model.save(last_checkpoint_path)
+        print(f"Model saved at: {last_checkpoint_path}")
 
-# let's visualize layer names and layer indices to see how many layers
-# we should freeze:
-for i, layer in enumerate(base_model.layers):
-   print(i, layer.name)
 
-# we chose to train the top 2 inception blocks, i.e. we will freeze
-# the first 249 layers and unfreeze the rest:
-for layer in model.layers:
-   layer.trainable = True
+def test(test_dataset, model_path, batch_size):
+    # Build dataloader
+    test_dataloader = Dataloader(test_dataset, batch_size=batch_size, shuffle=False)
+    
+    # Load model
+    print("Loading model...")
+    model = tf.keras.models.load_model(filepath=model_path, compile=False)
+    model.summary()
 
-# we need to recompile the model for these modifications to take effect
-# we use SGD with a low learning rate
-model.compile(optimizer=SGD(learning_rate=0.0001, momentum=0.9), loss='categorical_crossentropy', metrics=["accuracy"])
+    # Compile the model
+    model.compile(loss=BinaryCrossentropy(from_logits=True), metrics=[BinaryAccuracy()])
 
-# we train our model again (this time fine-tuning the top 2 inception blocks
-# alongside the top Dense layers
-history2 = model.fit(train_ds, validation_data=test_ds, epochs=EPOCHS2, callbacks=my_callbacks, shuffle=True)
+    # Evaluate model
+    print("Evaluating model...")
+    scores = model.evaluate(test_dataloader)
+    print("Evaluation results")
+    print(scores)
+    return scores
+    
 
-# Evaluate model
-scores = model.evaluate(test_ds)
-print(scores)
+def get_datasets(csv_dir, images_dir, target_size, prep_fn=None):
+    # Get data
+    df_train = pd.read_csv(os.path.join(csv_dir, "train.csv"))
+    df_val = pd.read_csv(os.path.join(csv_dir, "val.csv"))
+    df_test = pd.read_csv(os.path.join(csv_dir, "test.csv"))
+
+    # Build dataset
+    train_dataset = Dataset(df_train, images_dir=images_dir, da_fn=tr_da_fn(*target_size),
+                            preprocess_fn=prep_fn, target_size=target_size)
+    val_dataset = Dataset(df_val, images_dir=images_dir, da_fn=ts_da_fn(*target_size),
+                          preprocess_fn=prep_fn, target_size=target_size)
+    test_dataset = Dataset(df_test, images_dir=images_dir, da_fn=ts_da_fn(*target_size),
+                           preprocess_fn=prep_fn, target_size=target_size)
+    
+    return train_dataset, val_dataset, test_dataset
+
+
+def visualize(dataset, i, n=5): 
+    for _ in range(n):
+        image, original_image = dataset.__getitem__(i, show_originals=True)
+        plot_da_image(
+            image=image,
+            original_image=original_image,
+        )
+
+
+def main(batch_size=32, backbone="resnet50", epochs1=100, epochs2=200, base_path=".", output_path=".",
+         target_size=(256, 256), use_multiprocessing=True, workers=8, train_model=True, test_model=True,
+         show_samples=False):
+
+    # Vars
+    images_dir = os.path.join(base_path, "images256")
+    #masks_dir = os.path.join(base_path, "masks256")
+
+    # Outputs
+    checkpoints_path = os.path.join(output_path, RUN_NAME, "models")
+    last_checkpoint_path = os.path.join(checkpoints_path, "last_model.h5")
+    logs_path = os.path.join(output_path, RUN_NAME, "logs")
+    plots_path = os.path.join(output_path, RUN_NAME, "plots")
+
+    # Create folders
+    for dir_i in [checkpoints_path, logs_path, plots_path]:
+        Path(dir_i).mkdir(parents=True, exist_ok=True)
+
+    # Get model + auxiliar functions
+    model, prep_fn, _ = get_model(backbone=backbone)
+
+    # Get data
+    train_dataset, val_dataset, test_dataset = get_datasets(csv_dir=base_path, images_dir=images_dir,
+                                                            target_size=target_size, prep_fn=prep_fn)
+
+    # Visualize
+    if show_samples:
+        visualize(train_dataset, i=5, n=10)
+
+    # Train
+    if train_model:
+        train(model, train_dataset, val_dataset, batch_size=batch_size, epochs1=epochs1, epochs2=epochs2,
+              checkpoints_path=checkpoints_path, last_checkpoint_path=last_checkpoint_path, logs_path=logs_path,
+              plots_path=plots_path, use_multiprocessing=use_multiprocessing, workers=workers)
+
+    # Evaluate
+    if test_model:
+        test(test_dataset, model_path=last_checkpoint_path, batch_size=batch_size)
+    
+    
+if __name__ == "__main__":
+    BASE_PATH = "/home/scarrion/datasets/covid19/front"
+    OUTPUT_PATH = "/home/scarrion/projects/mltests/covid19/code/classification/.outputs"
+
+    # Run
+    main(train_model=True, test_model=True, show_samples=False, base_path=BASE_PATH, output_path=OUTPUT_PATH)
+    print("Done!")
+

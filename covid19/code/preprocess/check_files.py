@@ -12,7 +12,7 @@ sns.set()
 BASE_PATH = "/home/scarrion/datasets/covid19/all-covid"
 
 # Check if all masks match an images
-img_files = [os.path.splitext(os.path.split(file)[1])[0] for file in glob.glob(os.path.join(BASE_PATH, "images256", "*.jpg"))]
+img_files = [os.path.splitext(os.path.split(file)[1])[0] for file in glob.glob(os.path.join(BASE_PATH, "images256", "*.png"))]
 mask_files = [os.path.splitext(os.path.split(file)[1])[0] for file in glob.glob(os.path.join(BASE_PATH, "masks256", "*.png"))]
 
 print("Summary:")
