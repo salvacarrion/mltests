@@ -100,10 +100,9 @@ class Dataloader(keras.utils.Sequence):
             dataY.append(y)
 
         # Transpose list of lists
-        # X = np.stack(data, axis=0)
         X = tuple([np.stack(samples, axis=0) for samples in zip(*dataX)])
         Y = tuple([np.stack(samples, axis=0) for samples in zip(*dataY)])
-        return X, Y
+        return X, Y[2]
 
     def __len__(self):
         """Denotes the number of batches per epoch"""

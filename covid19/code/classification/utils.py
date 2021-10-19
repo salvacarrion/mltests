@@ -1,6 +1,7 @@
 import os
 
 import matplotlib.pyplot as plt
+from matplotlib import ticker
 
 
 # helper function for data visualization
@@ -47,39 +48,33 @@ def plot_da_image(image, original_image=None):
     plt.show()
 
 
-def plot_hist(history, title="", savepath=None, suffix=""):
-    # Plot training & validation iou_score values
-    plt.figure(figsize=(30, 5))
+def plot_hist(history, title="", savepath=None, suffix="", show_plot=True):
+    metrics = [m for m in history.history.keys() if not m.startswith("val")]
 
-    # Set title
-    plt.title(title)
+    for m in metrics:
+        fig, ax = plt.subplots(1, 1, figsize=(13, 8))
 
-    plt.subplot(121)
-    plt.plot(history.history['iou_score'])
-    plt.plot(history.history['val_iou_score'])
-    plt.title('Model IoU')
-    plt.ylabel('IoU score')
-    plt.xlabel('Epoch')
-    plt.legend(['Train', 'Val'], loc='upper left')
+        # Plot
+        ax.plot(history.history[m])
 
-    # Save figures
-    if savepath:
-        plt.savefig(os.path.join(savepath, f"iou{suffix}.pdf"))
-        plt.savefig(os.path.join(savepath, f"iou{suffix}.png"))
+        val_metric = f"val_{m}"
+        if val_metric in history.history:
+            ax.plot(history.history[val_metric])
+            ax.legend(['Train', 'Val'], loc='upper left')
+        else:
+            ax.legend(['Train'], loc='upper left')
 
-    # Plot training & validation loss values
-    plt.subplot(122)
-    plt.plot(history.history['loss'])
-    plt.plot(history.history['val_loss'])
-    plt.title('Model loss')
-    plt.ylabel('Loss')
-    plt.xlabel('Epoch')
-    plt.legend(['Train', 'Val'], loc='upper left')
+        # Common
+        # ax.xaxis.set_major_locator(ticker.AutoLocator())
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel(m.replace("_", " ").title())
+        plt.title(title + f'\nModel {m.replace("_", " ")}')
 
-    # Save figures
-    if savepath:
-        plt.savefig(os.path.join(savepath, f"loss{suffix}.pdf"))
-        plt.savefig(os.path.join(savepath, f"loss{suffix}.png"))
+        # Save figures
+        if savepath:
+            plt.savefig(os.path.join(savepath, f"{m}{suffix}.pdf"))
+            plt.savefig(os.path.join(savepath, f"{m}{suffix}.png"))
 
-    # Show
-    plt.show()
+        # Show
+        if show_plot:
+            plt.show()

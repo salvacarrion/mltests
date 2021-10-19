@@ -4,35 +4,48 @@ import datetime
 from pathlib import Path
 import tensorflow as tf
 from tensorflow.keras.optimizers import SGD, Adam
-from tensorflow.keras.losses import BinaryCrossentropy
-from tensorflow.keras.metrics import BinaryAccuracy
 
 
 from covid19.code.classification.da import *
 from covid19.code.classification.utils import *
 from covid19.code.classification.dataset import *
 
-RUN_NAME = f"resnet50_1"
+RUN_NAME = f"resnet50_i256_covid19"
 
+LOSS = tf.keras.losses.BinaryCrossentropy()
+METRICS = [tf.keras.metrics.BinaryAccuracy(),
+           tf.keras.metrics.AUC(),
+           tf.keras.metrics.Precision(),
+           tf.keras.metrics.Recall()]
+TARGET_SIZE = (224, 224)
 
-def get_model(backbone):
+def get_model(backbone, target_size=None, freeze_base_model=True):
+    istrainable = not freeze_base_model
 
     if backbone == "resnet50":
         from tensorflow.keras.applications.resnet50 import ResNet50
         from tensorflow.keras.applications.resnet50 import preprocess_input, decode_predictions
 
-        # Define model
+        # Instantiate model
         base_model = ResNet50(include_top=True, weights="imagenet")
+        base_model.trainable = istrainable  # Freeze base model
 
-        # Define inputs/ouputs
-        inputs = tf.keras.layers.Input(shape=(224, 224, 3))  # Same as base_model
-        x = base_model(inputs)
+        # Create a model on top of the base model
+        inputs = tf.keras.layers.Input(shape=(*target_size, 3))  # Same as base_model
+        x = base_model(inputs, training=istrainable)
         outputs = tf.keras.layers.Dense(1, activation='sigmoid')(x)
         model = tf.keras.Model(inputs, outputs)
         return model, preprocess_input, decode_predictions
 
     else:
         raise ValueError("Unknown backbone")
+
+
+def unfreeze_model(model):
+    # We unfreeze all layers but BatchNorm (to not destroy the non-trainable weights)
+    for layer in model.layers:
+        if not isinstance(layer, tf.keras.layers.BatchNormalization):
+            layer.trainable = True
 
 
 def train(model, train_dataset, val_dataset, batch_size, epochs1, epochs2,
@@ -55,24 +68,25 @@ def train(model, train_dataset, val_dataset, batch_size, epochs1, epochs2,
     model.summary()
     
     # Compile the model
-    model.compile(optimizer=Adam(learning_rate=1e-3), loss=BinaryCrossentropy(from_logits=True), metrics=[BinaryAccuracy()])
-
-    for batch in train_dataloader:
-        asdas = 3
+    model.compile(optimizer=Adam(learning_rate=1e-3), loss=LOSS, metrics=METRICS)
 
     # train the model on the new data for a few epochs
-    print("Training decoder first...")
+    print("Training output layers...")
     history1 = model.fit(train_dataloader, validation_data=val_dataloader, epochs=epochs1, callbacks=model_callbacks,
                          use_multiprocessing=use_multiprocessing, workers=workers)
     print("Initial training results:")
     print(history1)
     if plots_path:
-        plot_hist(history1, title="Training decoder", savepath=plots_path, suffix="_initial")
-    
+        plot_hist(history1, title="Training output layers", savepath=plots_path, suffix="_initial")
+
+    # Unfreezing layers
+    print("Unfreezing layers")
+    unfreeze_model(model)
+
     # we need to recompile the model for these modifications to take effect
     # we use SGD with a low learning rate
     print("Fine-tuning model...")
-    model.compile(optimizer=SGD(learning_rate=1e-4, momentum=0.9), loss=BinaryCrossentropy(from_logits=True), metrics=[BinaryAccuracy()])
+    model.compile(optimizer=SGD(learning_rate=1e-5, momentum=0.9), loss=LOSS, metrics=METRICS)
     
     # we train our model again (this time fine-tuning the top 2 inception blocks
     # alongside the top Dense layers
@@ -100,7 +114,7 @@ def test(test_dataset, model_path, batch_size):
     model.summary()
 
     # Compile the model
-    model.compile(loss=BinaryCrossentropy(from_logits=True), metrics=[BinaryAccuracy()])
+    model.compile(loss=LOSS, metrics=METRICS)
 
     # Evaluate model
     print("Evaluating model...")
@@ -136,8 +150,8 @@ def visualize(dataset, i, n=5):
         )
 
 
-def main(batch_size=32, backbone="resnet50", epochs1=100, epochs2=200, base_path=".", output_path=".",
-         target_size=(256, 256), use_multiprocessing=True, workers=8, train_model=True, test_model=True,
+def main(batch_size=32, backbone="resnet50", epochs1=5, epochs2=15, base_path=".", output_path=".",
+         target_size=(256, 256), use_multiprocessing=False, workers=1, train_model=True, test_model=True,
          show_samples=False):
 
     # Vars
@@ -155,7 +169,7 @@ def main(batch_size=32, backbone="resnet50", epochs1=100, epochs2=200, base_path
         Path(dir_i).mkdir(parents=True, exist_ok=True)
 
     # Get model + auxiliar functions
-    model, prep_fn, _ = get_model(backbone=backbone)
+    model, prep_fn, _ = get_model(backbone=backbone, target_size=target_size, freeze_base_model=True)
 
     # Get data
     train_dataset, val_dataset, test_dataset = get_datasets(csv_dir=base_path, images_dir=images_dir,
@@ -181,6 +195,7 @@ if __name__ == "__main__":
     OUTPUT_PATH = "/home/scarrion/projects/mltests/covid19/code/classification/.outputs"
 
     # Run
-    main(train_model=True, test_model=True, show_samples=False, base_path=BASE_PATH, output_path=OUTPUT_PATH)
+    main(train_model=True, test_model=True, show_samples=False,
+         target_size=TARGET_SIZE, base_path=BASE_PATH, output_path=OUTPUT_PATH)
     print("Done!")
 
