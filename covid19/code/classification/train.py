@@ -8,16 +8,28 @@ from tensorflow.keras.optimizers import SGD, Adam
 
 from covid19.code.classification.da import *
 from covid19.code.classification.utils import *
+from covid19.code.classification.helpers import *
 from covid19.code.classification.dataset import *
 
-RUN_NAME = f"resnet50_i256_covid19"
+RUN_NAME = f"resnet50_i256_all"
+# tf.config.experimental_run_functions_eagerly(True)
+
+BACKBONE = "resnet50"
+TARGET_SIZE = (224, 224)
+EPOCHS1 = 5
+EPOCHS2 = 5
 
 LOSS = tf.keras.losses.BinaryCrossentropy()
-METRICS = [tf.keras.metrics.BinaryAccuracy(),
-           tf.keras.metrics.AUC(),
-           tf.keras.metrics.Precision(),
-           tf.keras.metrics.Recall()]
-TARGET_SIZE = (224, 224)
+METRICS = [
+    BinaryAccuracy_Infiltrates,
+    BinaryAccuracy_Pneumonia,
+    BinaryAccuracy_Covid19,
+    # tf.keras.metrics.BinaryAccuracy(),
+    # tf.keras.metrics.AUC(),
+    # tf.keras.metrics.Precision(),
+    # tf.keras.metrics.Recall()
+]
+
 
 def get_model(backbone, target_size=None, freeze_base_model=True):
     istrainable = not freeze_base_model
@@ -33,7 +45,7 @@ def get_model(backbone, target_size=None, freeze_base_model=True):
         # Create a model on top of the base model
         inputs = tf.keras.layers.Input(shape=(*target_size, 3))  # Same as base_model
         x = base_model(inputs, training=istrainable)
-        outputs = tf.keras.layers.Dense(1, activation='sigmoid')(x)
+        outputs = tf.keras.layers.Dense(3, activation='sigmoid')(x)
         model = tf.keras.Model(inputs, outputs)
         return model, preprocess_input, decode_predictions
 
@@ -79,23 +91,27 @@ def train(model, train_dataset, val_dataset, batch_size, epochs1, epochs2,
     if plots_path:
         plot_hist(history1, title="Training output layers", savepath=plots_path, suffix="_initial")
 
-    # Unfreezing layers
-    print("Unfreezing layers")
-    unfreeze_model(model)
+    # Fine-tune?
+    if epochs2 <= 0:
+        print("Skipping fine-tuning")
+    else:
+        # Unfreezing layers
+        print("Unfreezing layers")
+        unfreeze_model(model)
 
-    # we need to recompile the model for these modifications to take effect
-    # we use SGD with a low learning rate
-    print("Fine-tuning model...")
-    model.compile(optimizer=SGD(learning_rate=1e-5, momentum=0.9), loss=LOSS, metrics=METRICS)
-    
-    # we train our model again (this time fine-tuning the top 2 inception blocks
-    # alongside the top Dense layers
-    history2 = model.fit(train_dataloader, validation_data=val_dataloader, epochs=epochs2, callbacks=model_callbacks,
-                         use_multiprocessing=use_multiprocessing, workers=workers)
-    print("Fine-tuning results:")
-    print(history2)
-    if plots_path:
-        plot_hist(history2, title="Fine-tuning full model", savepath=plots_path, suffix="_finetuning")
+        # we need to recompile the model for these modifications to take effect
+        # we use SGD with a low learning rate
+        print("Fine-tuning model...")
+        model.compile(optimizer=SGD(learning_rate=1e-5, momentum=0.9), loss=LOSS, metrics=METRICS)
+
+        # we train our model again (this time fine-tuning the top 2 inception blocks
+        # alongside the top Dense layers
+        history2 = model.fit(train_dataloader, validation_data=val_dataloader, epochs=epochs2, callbacks=model_callbacks,
+                             use_multiprocessing=use_multiprocessing, workers=workers)
+        print("Fine-tuning results:")
+        print(history2)
+        if plots_path:
+            plot_hist(history2, title="Fine-tuning full model", savepath=plots_path, suffix="_finetuning")
     
     # Save model
     if last_checkpoint_path:
@@ -150,8 +166,7 @@ def visualize(dataset, i, n=5):
         )
 
 
-def main(batch_size=32, backbone="resnet50", epochs1=5, epochs2=15, base_path=".", output_path=".",
-         target_size=(256, 256), use_multiprocessing=False, workers=1, train_model=True, test_model=True,
+def main(backbone, target_size, batch_size=32, epochs1=5, epochs2=10, base_path=".", output_path=".", use_multiprocessing=False, workers=1, train_model=True, test_model=True,
          show_samples=False):
 
     # Vars
@@ -195,7 +210,9 @@ if __name__ == "__main__":
     OUTPUT_PATH = "/home/scarrion/projects/mltests/covid19/code/classification/.outputs"
 
     # Run
-    main(train_model=True, test_model=True, show_samples=False,
-         target_size=TARGET_SIZE, base_path=BASE_PATH, output_path=OUTPUT_PATH)
+    main(backbone=BACKBONE, target_size=TARGET_SIZE,
+         train_model=True, test_model=True, show_samples=False,
+         epochs1=EPOCHS1, epochs2=EPOCHS2,
+         base_path=BASE_PATH, output_path=OUTPUT_PATH)
     print("Done!")
 

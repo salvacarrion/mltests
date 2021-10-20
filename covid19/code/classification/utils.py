@@ -55,11 +55,12 @@ def plot_hist(history, title="", savepath=None, suffix="", show_plot=True):
         fig, ax = plt.subplots(1, 1, figsize=(13, 8))
 
         # Plot
-        ax.plot(history.history[m])
+        x = range(1, len(history.history[m])+1)
+        ax.plot(x, history.history[m])
 
         val_metric = f"val_{m}"
         if val_metric in history.history:
-            ax.plot(history.history[val_metric])
+            ax.plot(x, history.history[val_metric])
             ax.legend(['Train', 'Val'], loc='upper left')
         else:
             ax.legend(['Train'], loc='upper left')
@@ -68,7 +69,7 @@ def plot_hist(history, title="", savepath=None, suffix="", show_plot=True):
         # ax.xaxis.set_major_locator(ticker.AutoLocator())
         ax.set_xlabel('Epoch')
         ax.set_ylabel(m.replace("_", " ").title())
-        plt.title(title + f'\nModel {m.replace("_", " ")}')
+        plt.title(f'{m.replace("_", " ").title()}\n({title})')
 
         # Save figures
         if savepath:
