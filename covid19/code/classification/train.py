@@ -11,41 +11,59 @@ from covid19.code.classification.utils import *
 from covid19.code.classification.helpers import *
 from covid19.code.classification.dataset import *
 
-RUN_NAME = f"resnet50_i256_all"
 # tf.config.experimental_run_functions_eagerly(True)
 
 BACKBONE = "resnet50"
 TARGET_SIZE = (224, 224)
 EPOCHS1 = 5
 EPOCHS2 = 5
+SINGLE_OUTPUT_IDX = None  # None == all, 0,1,2=>infiltrates, pneumonia, covid19
 
 LOSS = tf.keras.losses.BinaryCrossentropy()
-METRICS = [
-    BinaryAccuracy_Infiltrates,
-    BinaryAccuracy_Pneumonia,
-    BinaryAccuracy_Covid19,
-    # tf.keras.metrics.BinaryAccuracy(),
-    # tf.keras.metrics.AUC(),
-    # tf.keras.metrics.Precision(),
-    # tf.keras.metrics.Recall()
-]
+METRICS = []
+
+if SINGLE_OUTPUT_IDX is None:  # Multi-label
+    print("###### Multi-label classification ######")
+    METRICS += [
+        BinaryAccuracy_Infiltrates,
+        BinaryAccuracy_Pneumonia,
+        BinaryAccuracy_Covid19
+    ]
+else:
+    print("###### Multi-class classification ######")
+    METRICS = [
+        tf.keras.metrics.BinaryAccuracy(),
+        tf.keras.metrics.AUC(),
+        tf.keras.metrics.Precision(),
+        tf.keras.metrics.Recall()
+    ]
+
+RUN_NAME = f"{BACKBONE}_" \
+           f"i{TARGET_SIZE[0]}x{TARGET_SIZE[1]}_" \
+           f"o{'all' if SINGLE_OUTPUT_IDX is None else SINGLE_OUTPUT_IDX}_" \
+           f"1ep{EPOCHS1}_2ep{EPOCHS2}"
 
 
 def get_model(backbone, target_size=None, freeze_base_model=True):
     istrainable = not freeze_base_model
+    classes = 3 if SINGLE_OUTPUT_IDX is None else 1
 
     if backbone == "resnet50":
         from tensorflow.keras.applications.resnet50 import ResNet50
         from tensorflow.keras.applications.resnet50 import preprocess_input, decode_predictions
 
-        # Instantiate model
-        base_model = ResNet50(include_top=True, weights="imagenet")
-        base_model.trainable = istrainable  # Freeze base model
+        # Instantiate base model with pre-trained weights
+        base_model = ResNet50(input_shape=(*target_size, 3), include_top=False, weights="imagenet")
 
-        # Create a model on top of the base model
-        inputs = tf.keras.layers.Input(shape=(*target_size, 3))  # Same as base_model
-        x = base_model(inputs, training=istrainable)
-        outputs = tf.keras.layers.Dense(3, activation='sigmoid')(x)
+        # Freeze base model
+        base_model.trainable = istrainable
+
+        # Create a new model on top
+        inputs = base_model.input
+        x = base_model(inputs)
+        x = tf.keras.layers.GlobalAveragePooling2D(name='avg_pool')(x)
+        outputs = tf.keras.layers.Dense(classes, activation="sigmoid", name='predictions')(x)
+
         model = tf.keras.Model(inputs, outputs)
         return model, preprocess_input, decode_predictions
 
@@ -64,8 +82,8 @@ def train(model, train_dataset, val_dataset, batch_size, epochs1, epochs2,
           checkpoints_path=None, last_checkpoint_path=None, logs_path=None,
           plots_path=None, use_multiprocessing=False, workers=1):
     # Build dataloaders
-    train_dataloader = Dataloader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_dataloader = Dataloader(val_dataset, batch_size=batch_size, shuffle=False)
+    train_dataloader = Dataloader(train_dataset, batch_size=batch_size, shuffle=True, single_output_idx=SINGLE_OUTPUT_IDX)
+    val_dataloader = Dataloader(val_dataset, batch_size=batch_size, shuffle=False, single_output_idx=SINGLE_OUTPUT_IDX)
     
     # Callbacks
     model_callbacks = [
@@ -122,7 +140,7 @@ def train(model, train_dataset, val_dataset, batch_size, epochs1, epochs2,
 
 def test(test_dataset, model_path, batch_size):
     # Build dataloader
-    test_dataloader = Dataloader(test_dataset, batch_size=batch_size, shuffle=False)
+    test_dataloader = Dataloader(test_dataset, batch_size=batch_size, shuffle=False, single_output_idx=SINGLE_OUTPUT_IDX)
     
     # Load model
     print("Loading model...")

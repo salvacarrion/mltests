@@ -66,7 +66,7 @@ def plot_hist(history, title="", savepath=None, suffix="", show_plot=True):
             ax.legend(['Train'], loc='upper left')
 
         # Common
-        # ax.xaxis.set_major_locator(ticker.AutoLocator())
+        ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
         ax.set_xlabel('Epoch')
         ax.set_ylabel(m.replace("_", " ").title())
         plt.title(f'{m.replace("_", " ").title()}\n({title})')

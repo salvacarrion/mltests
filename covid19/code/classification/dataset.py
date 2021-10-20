@@ -77,12 +77,13 @@ class Dataset:
 
 class Dataloader(keras.utils.Sequence):
 
-    def __init__(self, dataset, batch_size=1, shuffle=False, predict=False):
+    def __init__(self, dataset, batch_size=1, shuffle=False, predict=False, single_output_idx=None):
         self.dataset = dataset
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.indexes = np.arange(len(dataset))
         self.predict = predict
+        self.single_output_idx = single_output_idx
         self.on_epoch_end()
 
     def __getitem__(self, i):
@@ -102,6 +103,7 @@ class Dataloader(keras.utils.Sequence):
         # Transpose list of lists
         X = tf.squeeze(np.stack(dataX, axis=0), axis=1)
         Y = np.stack(dataY, axis=0)
+        Y = Y if self.single_output_idx is None else Y[:, self.single_output_idx]
         return X, Y  # infiltrates, pneumonia, covid19
 
     def __len__(self):
