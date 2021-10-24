@@ -1,14 +1,15 @@
 import os
+import sys
 import time
 import datetime
 from pathlib import Path
 import tensorflow as tf
 from tensorflow.keras.optimizers import SGD, Adam
 
-from covid19.code.classification.da import *
-from covid19.code.classification.utils import *
-from covid19.code.classification.helpers import *
-from covid19.code.classification.dataset import *
+from da import *
+from utils import *
+from helpers import *
+from dataset import Dataset, Dataloader
 
 # tf.config.experimental_run_functions_eagerly(True)
 
@@ -17,7 +18,7 @@ SINGLE_OUTPUT_IDX = None  # None == all, 0,1,2=>infiltrates, pneumonia, covid19
 SHOW_PLOTS = True
 SHOW_DA_SAMPLES = False
 TRUNCATE_DATA = False
-WAIT_EPOCH_WARMUP = 50
+WAIT_EPOCH_WARMUP = 30
 NAME_AUX = ""
 
 
@@ -193,11 +194,11 @@ if __name__ == "__main__":
     BASE_PATH = "/home/scarrion/datasets/covid19/front"
     OUTPUT_PATH = "/home/scarrion/projects/mltests/covid19/code/classification/.outputs"
 
-    BACKBONE = "efficientnetb0"
+    BACKBONE = "efficientnetb7"
     BATCH_SIZE = 32
     INPUT_SIZE = 256
     TARGET_SIZE = (INPUT_SIZE, INPUT_SIZE)
-    EPOCHS1 = 200
+    EPOCHS1 = 250
     EPOCHS2 = 0  # Careful when unfreezing. More gradients, more memory.
     LR_EPOCH1 = 10e-3
     LR_EPOCH2 = 10e-5
