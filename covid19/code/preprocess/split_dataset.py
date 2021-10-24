@@ -2,7 +2,7 @@ import os
 import random
 import pandas as pd
 
-BASE_PATH = "/home/scarrion/datasets/covid19/front"
+BASE_PATH = "/home/scarrion/datasets/covid19/lateral"
 SPLIT = (0.8, 0.1, 0.1)
 random.seed(1234)
 
