@@ -18,6 +18,7 @@ SINGLE_OUTPUT_IDX = None  # None == all, 0,1,2=>infiltrates, pneumonia, covid19
 SHOW_PLOTS = True
 SHOW_DA_SAMPLES = False
 TRUNCATE_DATA = False
+PATIENCE = 15
 WAIT_EPOCH_WARMUP = 30
 NAME_AUX = ""
 
@@ -32,7 +33,7 @@ def train(model, train_dataset, val_dataset, batch_size, epochs1, epochs2,
     # Callbacks
     model_callbacks = [
         tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, min_lr=1e-7),
-        tf.keras.callbacks.EarlyStopping(patience=15),
+        CustomEarlyStopping(patience=PATIENCE, minimum_epochs=WAIT_EPOCH_WARMUP),
         CustomModelCheckpoint(filepath=checkpoints_path, save_best_only=True, wait_epoch_warmup=WAIT_EPOCH_WARMUP),  # It can make the end of an epoch extremely slow
         tf.keras.callbacks.TensorBoard(log_dir=logs_path),
         # WandbCallback(),
@@ -194,9 +195,9 @@ if __name__ == "__main__":
     BASE_PATH = "/home/scarrion/datasets/covid19/front"
     OUTPUT_PATH = "/home/scarrion/projects/mltests/covid19/code/classification/.outputs"
 
-    BACKBONE = "efficientnetb7"
+    BACKBONE = "resnet101v2"
     BATCH_SIZE = 32
-    INPUT_SIZE = 256
+    INPUT_SIZE = 512
     TARGET_SIZE = (INPUT_SIZE, INPUT_SIZE)
     EPOCHS1 = 250
     EPOCHS2 = 0  # Careful when unfreezing. More gradients, more memory.

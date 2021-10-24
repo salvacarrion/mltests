@@ -31,6 +31,16 @@ class CustomModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):
             super().on_epoch_end(epoch, logs)
 
 
+class CustomEarlyStopping(tf.keras.callbacks.EarlyStopping):
+    def __init__(self, *args, **kwargs):
+        self.minimum_epochs = kwargs.get("minimum_epochs", 0)
+        kwargs.pop('minimum_epochs', None)  # Problems with EarlyStopping kwargs
+        super().__init__(*args, **kwargs)
+
+    def on_epoch_end(self, epoch, logs=None):
+        if epoch >= self.minimum_epochs:
+            super().on_epoch_end(epoch, logs)
+
 
 def get_losses():
     losses = [tf.keras.losses.BinaryCrossentropy()]
