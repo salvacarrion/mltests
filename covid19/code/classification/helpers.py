@@ -67,7 +67,7 @@ def get_metrics(single_output_idx):
     return metrics
 
 
-def get_model(backbone, classes, target_size=None, freeze_base_model=True):
+def get_model(backbone, classes=None, target_size=None, freeze_base_model=True, ignore_model=None):
     istrainable = not freeze_base_model
 
     # Select backbone
@@ -92,33 +92,37 @@ def get_model(backbone, classes, target_size=None, freeze_base_model=True):
     else:
         raise ValueError(f"Unknown backbone: {backbone}")
 
-    # Instantiate base model with pre-trained weights
-    base_model = TFModel(input_shape=(*target_size, 3), include_top=False, weights="imagenet")
+    if ignore_model:
+        model = None
+    else:
+        # Instantiate base model with pre-trained weights
+        base_model = TFModel(input_shape=(*target_size, 3), include_top=False, weights="imagenet")
 
-    # Freeze base model
-    # base_model.trainable = istrainable
-    for layers in base_model.layers:
-        layers.trainable = istrainable
+        # Freeze base model
+        # base_model.trainable = istrainable
+        for layers in base_model.layers:
+            layers.trainable = istrainable
 
-    # Create a new model on top
-    inputs = base_model.input
-    x = base_model(inputs)
+        # Create a new model on top
+        inputs = base_model.input
+        x = base_model(inputs)
 
-    # Option A
-    x = tf.keras.layers.GlobalAveragePooling2D(name='avg_pool')(x)
+        # Option A
+        x = tf.keras.layers.GlobalAveragePooling2D(name='avg_pool')(x)
 
-    # Option B
-    # x = tf.keras.layers.Flatten(name='flatten')(x)
-    # x = tf.keras.layers.Dense(512, activation='relu', name='fc1')(x)
-    # x = tf.keras.layers.Dense(512, activation='relu', name='fc2')(x)
+        # Option B
+        # x = tf.keras.layers.Flatten(name='flatten')(x)
+        # x = tf.keras.layers.Dense(512, activation='relu', name='fc1')(x)
+        # x = tf.keras.layers.Dense(512, activation='relu', name='fc2')(x)
 
-    # Outputs
-    outputs = tf.keras.layers.Dense(classes, activation="sigmoid", name='predictions')(x)
-    model = tf.keras.Model(inputs, outputs)
+        # Outputs
+        outputs = tf.keras.layers.Dense(classes, activation="sigmoid", name='predictions')(x)
+        model = tf.keras.Model(inputs, outputs)
+
     return model, preprocess_input
 
 
-def unfreeze_base_model(model, n=None):
+def unfreeze_base_model(model, n=None, unfreeze=True):
     base_model = model.layers[1].layers
 
     # Select number of layers to unfreeze
