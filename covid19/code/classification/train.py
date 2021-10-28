@@ -17,7 +17,8 @@ from dataset import Dataset, Dataloader
 SHOW_PLOTS = True
 SHOW_DA_SAMPLES = False
 FINETUNE_ONLY = True
-NAME_AUX = ""
+TAB_INPUT = True
+NAME_AUX = "_TAB_FT"
 
 if FINETUNE_ONLY:
     PATIENCE = 15
@@ -31,8 +32,8 @@ def train(model, train_dataset, val_dataset, batch_size, epochs1, epochs2,
           checkpoints_path=None, logs_path=None,
           plots_path=None, use_multiprocessing=False, workers=1, single_output_idx=None):
     # Build dataloaders
-    train_dataloader = Dataloader(train_dataset, batch_size=batch_size, shuffle=True, single_output_idx=single_output_idx)
-    val_dataloader = Dataloader(val_dataset, batch_size=batch_size, shuffle=False, single_output_idx=single_output_idx)
+    train_dataloader = Dataloader(train_dataset, batch_size=batch_size, shuffle=True, single_output_idx=single_output_idx, multiple_inputs=TAB_INPUT)
+    val_dataloader = Dataloader(val_dataset, batch_size=batch_size, shuffle=False, single_output_idx=single_output_idx, multiple_inputs=TAB_INPUT)
 
     # Callbacks
     model_callbacks = [
@@ -95,7 +96,8 @@ def train(model, train_dataset, val_dataset, batch_size, epochs1, epochs2,
 
 def test(test_dataset, checkpoints_path, batch_size, single_output_idx=None):
     # Build dataloader
-    test_dataloader = Dataloader(test_dataset, batch_size=batch_size, shuffle=False, single_output_idx=single_output_idx)
+    test_dataloader = Dataloader(test_dataset, batch_size=batch_size, shuffle=False,
+                                 single_output_idx=single_output_idx, multiple_inputs=TAB_INPUT)
     
     # Load model
     print("Loading best model...")
@@ -127,7 +129,7 @@ def trunc_df(df, single_output_idx):
         raise ValueError("Invalid 'single_output_idx'")
 
 
-def get_datasets(csv_dir, images_dir, target_size, prep_fn=None, trunc_data=False, single_output_idx=None):
+def get_datasets(csv_dir, images_dir, target_size, prep_fn=None, trunc_data=False, single_output_idx=None, tab_input=False):
     # Get data
     df_train = pd.read_csv(os.path.join(csv_dir, "train.csv"))
     df_val = pd.read_csv(os.path.join(csv_dir, "val.csv"))
@@ -141,11 +143,11 @@ def get_datasets(csv_dir, images_dir, target_size, prep_fn=None, trunc_data=Fals
 
     # Build dataset
     train_dataset = Dataset(df_train, images_dir=images_dir, da_fn=tr_da_fn(*target_size),
-                            preprocess_fn=prep_fn, target_size=target_size)
+                            preprocess_fn=prep_fn, target_size=target_size, tab_input=tab_input)
     val_dataset = Dataset(df_val, images_dir=images_dir, da_fn=ts_da_fn(*target_size),
-                          preprocess_fn=prep_fn, target_size=target_size)
+                          preprocess_fn=prep_fn, target_size=target_size, tab_input=tab_input)
     test_dataset = Dataset(df_test, images_dir=images_dir, da_fn=ts_da_fn(*target_size),
-                           preprocess_fn=prep_fn, target_size=target_size)
+                           preprocess_fn=prep_fn, target_size=target_size, tab_input=tab_input)
 
     print("****** Stats: **********************")
     print_stats(train_dataset, title="Train stats:")
@@ -185,8 +187,8 @@ def main(backbone, input_size, target_size, batch_size, epochs1, epochs2=0, base
         Path(dir_i).mkdir(parents=True, exist_ok=True)
 
     # Get model + auxiliar functions
+    classes = 3 if single_output_idx is None else 1
     if not model_path:
-        classes = 3 if single_output_idx is None else 1
         model, prep_fn = get_model(backbone=backbone, classes=classes, target_size=target_size, freeze_base_model=True)
     else:
         print("Loading best model...")
@@ -194,13 +196,22 @@ def main(backbone, input_size, target_size, batch_size, epochs1, epochs2=0, base
         model = tf.keras.models.load_model(filepath=model_path, compile=False)  # Loads best model automatically
 
         # Freeze base model
-        for layers in model.layers[1].layers:
-            layers.trainable = False
+        if TAB_INPUT:
+            for layer in model.layers:
+                layer.trainable = False
+        else:
+            for layers in model.layers[1].layers:
+                layers.trainable = False
+
+    # Add tabular input
+    if TAB_INPUT:
+        model = add_tabular_input(model, classes)
 
     # Get data
     train_dataset, val_dataset, test_dataset = get_datasets(csv_dir=base_path, images_dir=images_dir,
                                                             target_size=target_size, prep_fn=prep_fn,
-                                                            trunc_data=trunc_data, single_output_idx=single_output_idx)
+                                                            trunc_data=trunc_data, single_output_idx=single_output_idx,
+                                                            tab_input=TAB_INPUT)
 
     # Visualize
     if show_da_samples:
@@ -227,28 +238,27 @@ if __name__ == "__main__":
     BATCH_SIZE = 32
     INPUT_SIZE = 512
     TARGET_SIZE = (INPUT_SIZE, INPUT_SIZE)
-    EPOCHS1 = 0
-    EPOCHS2 = 250  # Careful when unfreezing. More gradients, more memory.
+    EPOCHS1 = 250
+    EPOCHS2 = 0  # Careful when unfreezing. More gradients, more memory.
     LR_EPOCH1 = 10e-3
     LR_EPOCH2 = 10e-5
-    UNFREEZE_N = 50
+    UNFREEZE_N = 0
 
-    for SINGLE_OUTPUT_IDX in [0, 1, 2]:
-        for TRUNCATE_DATA in [True, False]:
+    for SINGLE_OUTPUT_IDX in [0]:
+        for TRUNCATE_DATA in [False]:
             model_path = None
-            TMP_NAME_AUX = NAME_AUX  # Copy var and reset
             if FINETUNE_ONLY:
                 old_run_name = f"{BACKBONE}_" \
                            f"batch{BATCH_SIZE}_" \
                            f"inputsize{INPUT_SIZE}_" \
                            f"targetsize{TARGET_SIZE[0]}x{TARGET_SIZE[1]}_" \
                            f"output-{'all' if SINGLE_OUTPUT_IDX is None else SINGLE_OUTPUT_IDX}_" \
-                           f"1ep{250}_2ep{0}_" \
-                           f"unfreeze{str(None)}_" \
+                           f"1ep{0}_2ep{250}_" \
+                           f"unfreeze{50}_" \
                            f"truncdata{str(TRUNCATE_DATA)}" \
-                           f"{TMP_NAME_AUX}"
+                           f"_FT"
                 model_path = os.path.join(OUTPUT_PATH, old_run_name, "models")
-                TMP_NAME_AUX = f"{TMP_NAME_AUX}_FT"
+                print(f"Model path: {model_path}")
 
             # Set name
             RUN_NAME = f"{BACKBONE}_" \
@@ -259,7 +269,7 @@ if __name__ == "__main__":
                        f"1ep{EPOCHS1}_2ep{EPOCHS2}_" \
                        f"unfreeze{str(UNFREEZE_N)}_" \
                        f"truncdata{str(TRUNCATE_DATA)}" \
-                       f"{TMP_NAME_AUX}"
+                       f"{NAME_AUX}"
 
             print(f"##################################################")
             print(f"##################################################")
@@ -270,7 +280,7 @@ if __name__ == "__main__":
             # Run
             main(backbone=BACKBONE, input_size=INPUT_SIZE, target_size=TARGET_SIZE, batch_size=BATCH_SIZE,
                  epochs1=EPOCHS1, epochs2=EPOCHS2, base_path=BASE_PATH, output_path=OUTPUT_PATH,
-                 use_multiprocessing=False, workers=1, train_model=False, test_model=True,
+                 use_multiprocessing=False, workers=1, train_model=True, test_model=True,
                  show_da_samples=SHOW_DA_SAMPLES, run_name=RUN_NAME,
                  trunc_data=TRUNCATE_DATA, single_output_idx=SINGLE_OUTPUT_IDX, model_path=model_path)
             print("Done!")

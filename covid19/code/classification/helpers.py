@@ -122,6 +122,22 @@ def get_model(backbone, classes=None, target_size=None, freeze_base_model=True, 
     return model, preprocess_input
 
 
+def add_tabular_input(model, classes):
+    # Input1
+    input1 = model.input
+    input2 = tf.keras.layers.Input(shape=(2,), name="input_2b")
+
+    # Pre-outputs 1x3 + 1x3
+    output1 = model.output
+    output2 = tf.keras.layers.Dense(classes, activation="sigmoid", name='output_tab')(input2)
+
+    # Outputs
+    x = tf.keras.layers.Concatenate(axis=1)([output1, output2])
+    output = tf.keras.layers.Dense(classes, activation="sigmoid", name='final_predictions')(x)
+    model = tf.keras.Model([input1, input2], output)
+
+    return model
+
 def unfreeze_base_model(model, n=None, unfreeze=True):
     base_model = model.layers[1].layers
 

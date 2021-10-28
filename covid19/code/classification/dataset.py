@@ -18,10 +18,17 @@ class Dataset:
             preprocess_fn=None,
             target_size=None,
             memory_map=True,
+            tab_input=False,
     ):
-        # Get X
+        # Get X1
         self.ids = list(df["filepath"])
         self.images_fps = [os.path.join(images_dir, image_id) for image_id in self.ids]
+
+        # Get X2
+        self.tab = None
+        if tab_input:
+            trans_table = {'M': 0, 'F': 1}
+            self.tab = [(trans_table[x1], x2) for x1, x2 in zip(df["gender"], df["age"])]
 
         # Get y
         self.target_infiltrates = list(df["infiltrates"])
@@ -36,6 +43,7 @@ class Dataset:
         self.da_fn = da_fn
         self.preprocess_fn = preprocess_fn
         self.target_size = target_size
+        self.tab_input = tab_input
 
     def __getitem__(self, i, show_originals=False):
         # Read/Load data
@@ -67,7 +75,7 @@ class Dataset:
             x = (image, original_image)
             y = None
         else:
-            x = (image,)
+            x = (image,) if not self.tab_input else (image, np.array(self.tab[i], dtype=np.float32))
             y = (self.target_infiltrates[i], self.target_pneumonia[i], self.target_covid19[i])
         return x, y
 
@@ -77,13 +85,14 @@ class Dataset:
 
 class Dataloader(keras.utils.Sequence):
 
-    def __init__(self, dataset, batch_size=1, shuffle=False, predict=False, single_output_idx=None):
+    def __init__(self, dataset, batch_size=1, shuffle=False, predict=False, single_output_idx=None, multiple_inputs=False):
         self.dataset = dataset
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.indexes = np.arange(len(dataset))
         self.predict = predict
         self.single_output_idx = single_output_idx
+        self.multiple_inputs = multiple_inputs
         self.on_epoch_end()
 
     def __getitem__(self, i):
@@ -101,7 +110,12 @@ class Dataloader(keras.utils.Sequence):
             dataY.append(y)
 
         # Transpose list of lists
-        X = tf.squeeze(np.stack(dataX, axis=0), axis=1)
+        if self.multiple_inputs:
+            X = [x for x in zip(*dataX)]
+            X = [np.stack(x, axis=0) for x in X]
+        else:
+            X = tf.squeeze(np.stack(dataX, axis=0), axis=1)
+
         Y = np.stack(dataY, axis=0)
         Y = Y if self.single_output_idx is None else Y[:, self.single_output_idx]
         return X, Y  # infiltrates, pneumonia, covid19
