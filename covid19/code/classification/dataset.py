@@ -85,7 +85,8 @@ class Dataset:
 
 class Dataloader(keras.utils.Sequence):
 
-    def __init__(self, dataset, batch_size=1, shuffle=False, predict=False, single_output_idx=None, multiple_inputs=False):
+    def __init__(self, dataset, batch_size=1, shuffle=False, predict=False, single_output_idx=None,
+                 multiple_inputs=False, add_normal_cls=False):
         self.dataset = dataset
         self.batch_size = batch_size
         self.shuffle = shuffle
@@ -93,6 +94,7 @@ class Dataloader(keras.utils.Sequence):
         self.predict = predict
         self.single_output_idx = single_output_idx
         self.multiple_inputs = multiple_inputs
+        self.add_normal_cls = add_normal_cls
         self.on_epoch_end()
 
     def __getitem__(self, i):
@@ -118,7 +120,13 @@ class Dataloader(keras.utils.Sequence):
 
         Y = np.stack(dataY, axis=0)
         Y = Y if self.single_output_idx is None else Y[:, self.single_output_idx]
-        return X, Y  # infiltrates, pneumonia, covid19
+
+        # Add normal
+        if self.add_normal_cls:
+            Y_normal = np.expand_dims((np.sum(Y, axis=1) == 0).astype(np.int64), axis=1)
+            Y = np.concatenate([Y, Y_normal], axis=1)
+
+        return X, Y  # infiltrates, pneumonia, covid19, (normal)
 
     def __len__(self):
         """Denotes the number of batches per epoch"""

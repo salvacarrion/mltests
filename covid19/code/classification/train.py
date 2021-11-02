@@ -16,9 +16,10 @@ from dataset import Dataset, Dataloader
 # Vars
 SHOW_PLOTS = True
 SHOW_DA_SAMPLES = False
-FINETUNE_ONLY = True
-TAB_INPUT = True
-NAME_AUX = "_TAB_FT"
+FINETUNE_ONLY = False
+TAB_INPUT = False
+ADD_NORMAL_CLS = True
+NAME_AUX = ""
 
 if FINETUNE_ONLY:
     PATIENCE = 15
@@ -32,8 +33,8 @@ def train(model, train_dataset, val_dataset, batch_size, epochs1, epochs2,
           checkpoints_path=None, logs_path=None,
           plots_path=None, use_multiprocessing=False, workers=1, single_output_idx=None):
     # Build dataloaders
-    train_dataloader = Dataloader(train_dataset, batch_size=batch_size, shuffle=True, single_output_idx=single_output_idx, multiple_inputs=TAB_INPUT)
-    val_dataloader = Dataloader(val_dataset, batch_size=batch_size, shuffle=False, single_output_idx=single_output_idx, multiple_inputs=TAB_INPUT)
+    train_dataloader = Dataloader(train_dataset, batch_size=batch_size, shuffle=True, single_output_idx=single_output_idx, multiple_inputs=TAB_INPUT, add_normal_cls=ADD_NORMAL_CLS)
+    val_dataloader = Dataloader(val_dataset, batch_size=batch_size, shuffle=False, single_output_idx=single_output_idx, multiple_inputs=TAB_INPUT, add_normal_cls=ADD_NORMAL_CLS)
 
     # Callbacks
     model_callbacks = [
@@ -97,7 +98,8 @@ def train(model, train_dataset, val_dataset, batch_size, epochs1, epochs2,
 def test(test_dataset, checkpoints_path, batch_size, single_output_idx=None):
     # Build dataloader
     test_dataloader = Dataloader(test_dataset, batch_size=batch_size, shuffle=False,
-                                 single_output_idx=single_output_idx, multiple_inputs=TAB_INPUT)
+                                 single_output_idx=single_output_idx, multiple_inputs=TAB_INPUT,
+                                 add_normal_cls=ADD_NORMAL_CLS)
     
     # Load model
     print("Loading best model...")
@@ -129,7 +131,8 @@ def trunc_df(df, single_output_idx):
         raise ValueError("Invalid 'single_output_idx'")
 
 
-def get_datasets(csv_dir, images_dir, target_size, prep_fn=None, trunc_data=False, single_output_idx=None, tab_input=False):
+def get_datasets(csv_dir, images_dir, target_size, prep_fn=None, trunc_data=False, single_output_idx=None,
+                 tab_input=False):
     # Get data
     df_train = pd.read_csv(os.path.join(csv_dir, "train.csv"))
     df_val = pd.read_csv(os.path.join(csv_dir, "val.csv"))
@@ -187,7 +190,7 @@ def main(backbone, input_size, target_size, batch_size, epochs1, epochs2=0, base
         Path(dir_i).mkdir(parents=True, exist_ok=True)
 
     # Get model + auxiliar functions
-    classes = 3 if single_output_idx is None else 1
+    classes = 3 + int(ADD_NORMAL_CLS) if single_output_idx is None else 1
     if not model_path:
         model, prep_fn = get_model(backbone=backbone, classes=classes, target_size=target_size, freeze_base_model=True)
     else:
@@ -244,7 +247,7 @@ if __name__ == "__main__":
     LR_EPOCH2 = 10e-5
     UNFREEZE_N = 0
 
-    for SINGLE_OUTPUT_IDX in [0]:
+    for SINGLE_OUTPUT_IDX in [None]:
         for TRUNCATE_DATA in [False]:
             model_path = None
             if FINETUNE_ONLY:
@@ -265,7 +268,7 @@ if __name__ == "__main__":
                        f"batch{BATCH_SIZE}_" \
                        f"inputsize{INPUT_SIZE}_" \
                        f"targetsize{TARGET_SIZE[0]}x{TARGET_SIZE[1]}_" \
-                       f"output-{'all' if SINGLE_OUTPUT_IDX is None else SINGLE_OUTPUT_IDX}_" \
+                       f"output-{'all4' if SINGLE_OUTPUT_IDX is None else SINGLE_OUTPUT_IDX}_" \
                        f"1ep{EPOCHS1}_2ep{EPOCHS2}_" \
                        f"unfreeze{str(UNFREEZE_N)}_" \
                        f"truncdata{str(TRUNCATE_DATA)}" \
