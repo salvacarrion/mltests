@@ -51,7 +51,7 @@ def train(model, train_dataset, val_dataset, batch_size, epochs1, epochs2,
     # print("------------------------------------------")
 
     # Compile the model
-    model.compile(optimizer=Adam(learning_rate=LR_EPOCH1), loss=get_losses(), metrics=get_metrics(single_output_idx))
+    model.compile(optimizer=Adam(learning_rate=LR_EPOCH1), loss=get_losses(), metrics=get_metrics(single_output_idx, add_normal=ADD_NORMAL_CLS))
 
     # Print model
     model.summary()
@@ -80,7 +80,7 @@ def train(model, train_dataset, val_dataset, batch_size, epochs1, epochs2,
         # we need to recompile the model for these modifications to take effect
         # we use SGD with a low learning rate
         print("Fine-tuning model...")
-        model.compile(optimizer=SGD(learning_rate=LR_EPOCH2, momentum=0.9), loss=get_losses(), metrics=get_metrics(single_output_idx))
+        model.compile(optimizer=SGD(learning_rate=LR_EPOCH2, momentum=0.9), loss=get_losses(), metrics=get_metrics(single_output_idx, add_normal=ADD_NORMAL_CLS))
 
         # Print model
         model.summary()
@@ -107,7 +107,7 @@ def test(test_dataset, checkpoints_path, batch_size, single_output_idx=None):
     model.summary()
 
     # Compile the model
-    model.compile(loss=get_losses(), metrics=get_metrics(single_output_idx))
+    model.compile(loss=get_losses(), metrics=get_metrics(single_output_idx, add_normal=ADD_NORMAL_CLS))
 
     # Evaluate model
     print("Evaluating model...")
@@ -165,11 +165,17 @@ def print_stats(dataset, title="Stats:"):
     infiltrates = sum(dataset.target_infiltrates)
     pneumonia = sum(dataset.target_pneumonia)
     covid19 = sum(dataset.target_covid19)
+    normal = int((np.sum(np.stack([np.array(dataset.target_infiltrates), np.array(dataset.target_pneumonia) , np.array(dataset.target_covid19)], axis=1), axis=1)==0).astype(np.int64).sum())
 
+    # Print stats
     print(title)
     print("\t- Infiltrates: {} of {} ({:.2f}%)".format(infiltrates, total, infiltrates/total*100))
     print("\t- Pneumonia: {} of {} ({:.2f}%)".format(pneumonia, total, pneumonia/total*100))
     print("\t- Covid19: {} of {} ({:.2f}%)".format(covid19, total, covid19/total*100))
+
+    # Add normal class
+    if ADD_NORMAL_CLS:
+        print("\t- Normal: {} of {} ({:.2f}%)".format(normal, total, normal/total*100))
 
 
 def main(backbone, input_size, target_size, batch_size, epochs1, epochs2=0, base_path=".", output_path=".",

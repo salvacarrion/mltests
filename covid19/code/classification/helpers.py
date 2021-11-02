@@ -13,6 +13,9 @@ def BinaryAccuracy_Pneumonia(y_true, y_pred, i=1):
 def BinaryAccuracy_Covid19(y_true, y_pred, i=2):
     return tf.keras.metrics.binary_accuracy(y_true[:, i], y_pred[:, i])
 
+@tf.function
+def BinaryAccuracy_Normal(y_true, y_pred, i=3):
+    return tf.keras.metrics.binary_accuracy(y_true[:, i], y_pred[:, i])
 
 class CustomModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):
 
@@ -47,7 +50,7 @@ def get_losses():
     return losses
 
 
-def get_metrics(single_output_idx):
+def get_metrics(single_output_idx, add_normal=False):
     metrics = []
     if single_output_idx is None:  # Multi-label
         print("###### Multi-label classification ######")
@@ -56,6 +59,10 @@ def get_metrics(single_output_idx):
             BinaryAccuracy_Pneumonia,
             BinaryAccuracy_Covid19
         ]
+
+        # Add normal class
+        if add_normal:
+            metrics.append(BinaryAccuracy_Normal)
     else:
         print(f"###### Multi-class classification (cls: '{single_output_idx}') ######")
         metrics = [
