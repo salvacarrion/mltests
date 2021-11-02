@@ -253,7 +253,7 @@ if __name__ == "__main__":
     LR_EPOCH2 = 10e-5
     UNFREEZE_N = 0
 
-    for SINGLE_OUTPUT_IDX in [None]:
+    for SINGLE_OUTPUT_IDX in [3]:
         for TRUNCATE_DATA in [False]:
             model_path = None
             if FINETUNE_ONLY:
@@ -261,11 +261,11 @@ if __name__ == "__main__":
                            f"batch{BATCH_SIZE}_" \
                            f"inputsize{INPUT_SIZE}_" \
                            f"targetsize{TARGET_SIZE[0]}x{TARGET_SIZE[1]}_" \
-                           f"output-{'all' if SINGLE_OUTPUT_IDX is None else SINGLE_OUTPUT_IDX}_" \
-                           f"1ep{0}_2ep{250}_" \
-                           f"unfreeze{50}_" \
+                           f"output-{'all4' if SINGLE_OUTPUT_IDX is None else SINGLE_OUTPUT_IDX}_" \
+                           f"1ep{250}_2ep{0}_" \
+                           f"unfreeze{0}_" \
                            f"truncdata{str(TRUNCATE_DATA)}" \
-                           f"_FT"
+                           f""
                 model_path = os.path.join(OUTPUT_PATH, old_run_name, "models")
                 print(f"Model path: {model_path}")
 

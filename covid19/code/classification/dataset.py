@@ -118,14 +118,16 @@ class Dataloader(keras.utils.Sequence):
         else:
             X = tf.squeeze(np.stack(dataX, axis=0), axis=1)
 
+        # Stack list
         Y = np.stack(dataY, axis=0)
-        Y = Y if self.single_output_idx is None else Y[:, self.single_output_idx]
 
         # Add normal
         if self.add_normal_cls:
             Y_normal = np.expand_dims((np.sum(Y, axis=1) == 0).astype(np.int64), axis=1)
             Y = np.concatenate([Y, Y_normal], axis=1)
 
+        # Number of outputs
+        Y = Y if self.single_output_idx is None else Y[:, self.single_output_idx]
         return X, Y  # infiltrates, pneumonia, covid19, (normal)
 
     def __len__(self):
