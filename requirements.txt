@@ -1,12 +1,18 @@
 torch
 tensorflow
-
 numpy
 scikit-learn
 pandas
-
 matplotlib
 seaborn
-
 tqdm
+
+# Extra
+segmentation-models
+albumentations
+opencv-python
 wandb
+
+# Export to ONNX
+tf2onnx
+onnx
