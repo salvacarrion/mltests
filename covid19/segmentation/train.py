@@ -1,5 +1,3 @@
-import os
-import time
 from pathlib import Path
 
 import tensorflow as tf
@@ -10,8 +8,8 @@ from segmentation_models.utils import set_trainable
 from segmentation_models.losses import bce_jaccard_loss
 from segmentation_models.metrics import iou_score
 
-from covid19.code.segmentation.utils import *
-from covid19.code.segmentation.dataset import DatasetMasks, DataloaderMasks
+from covid19.segmentation.utils import *
+from covid19.segmentation.dataset import DatasetMasks, DataloaderMasks
 
 # Fix sm
 sm.set_framework('tf.keras')

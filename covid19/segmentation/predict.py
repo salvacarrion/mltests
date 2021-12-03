@@ -1,24 +1,15 @@
-import os
-import time
-
 import tensorflow as tf
-from tensorflow.keras.optimizers import SGD, Adam
 
 import segmentation_models as sm
-from segmentation_models import Unet
-from segmentation_models.utils import set_trainable
-from segmentation_models import get_preprocessing
 from segmentation_models.losses import bce_jaccard_loss
 from segmentation_models.metrics import iou_score
 
 from tqdm import tqdm
 
-import numpy as np
 from PIL import Image
-from matplotlib.pyplot import imshow
 
-from covid19.code.segmentation.utils import *
-from covid19.code.segmentation.dataset import DatasetImages, DataloaderImages
+from covid19.segmentation.utils import *
+from covid19.segmentation.dataset import DatasetImages, DataloaderImages
 
 # Fix sm
 sm.set_framework('tf.keras')
