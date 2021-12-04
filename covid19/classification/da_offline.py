@@ -13,12 +13,12 @@ sns.set()
 from covid19.classification.da import offline_da_fn
 
 BASE_PATH = "/Users/salvacarrion/Documents/Programming/datasets/nn/vision/covid19/front"
-SAVE_PATH = "/Users/salvacarrion/Documents/Programming/datasets/nn/vision/covid19/front_augmented"
+SAVE_PATH = "/Users/salvacarrion/Documents/Programming/datasets/nn/vision/covid19/front_squared"
 
 
-def main(repeats, image_size):
+def process_splits(repeats, image_size):
     # Augmentation
-    da_fn = offline_da_fn(image_size, image_size)
+    da_fn = offline_da_fn(image_size, image_size, augment=True)
 
     # Get data
     df_train = pd.read_csv(os.path.join(BASE_PATH, "data", "train.csv"))
@@ -48,8 +48,8 @@ def main(repeats, image_size):
                 new_row = dict(row)  # Get row
 
                 # Form new name
-                new_name = f"{fname}__a{j+1}{ext}"
-                new_row["filepath"] = new_name
+                # new_name = f"{fname}__a{j+1}{ext}"
+                # new_row["filepath"] = new_name
 
                 # Open image
                 img_path = os.path.join(BASE_PATH, "images", f"images512", filename)
@@ -62,7 +62,7 @@ def main(repeats, image_size):
                 image = sample['image']
 
                 # Save image
-                img_savepath = os.path.join(SAVE_PATH, "images", f"images{image_size}", new_name)
+                img_savepath = os.path.join(SAVE_PATH, "images", f"images{image_size}", filename)
                 image = Image.fromarray(image)
                 image.save(img_savepath)
 
@@ -80,5 +80,29 @@ def main(repeats, image_size):
     print("Done!")
 
 
+def process_masks(image_size):
+    # Augmentation
+    da_fn = offline_da_fn(image_size, image_size, augment=False)
+
+    # Walk through splits
+    masks_files = list(glob.glob(os.path.join(BASE_PATH, "masks", "masks256_manual", "*.png")))
+    for filename in tqdm.tqdm(masks_files, total=len(masks_files)):
+        head, tail = os.path.split(filename)
+
+        # Open image
+        ori_image = np.array(Image.open(filename))
+
+        # Perform augmentation
+        sample = da_fn(image=ori_image)
+        image = sample['image']
+
+        # Save image
+        img_savepath = os.path.join(SAVE_PATH, "masks", f"masks{image_size}", tail)
+        image = Image.fromarray(image)
+        image.save(img_savepath)
+
+    print("Done!")
+
 if __name__ == "__main__":
-    main(repeats=15, image_size=256)
+    # process_splits(image_size=512)
+    process_masks(image_size=512)
