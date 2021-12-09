@@ -12,13 +12,14 @@ sns.set()
 
 from covid19.classification.da import offline_da_fn
 
-BASE_PATH = "/Users/salvacarrion/Documents/Programming/datasets/nn/vision/covid19/front"
-SAVE_PATH = "/Users/salvacarrion/Documents/Programming/datasets/nn/vision/covid19/front_squared"
+BASE_PATH = "/Users/salvacarrion/Documents/Programming/datasets/nn/vision/covid19/front-cropped"
+SAVE_PATH = "/Users/salvacarrion/Documents/Programming/datasets/nn/vision/covid19/512x512"
 
 
 def process_splits(repeats, image_size):
     # Augmentation
-    da_fn = offline_da_fn(image_size, image_size, augment=True)
+    da_fn_noaugment = offline_da_fn(image_size, image_size, augment=False)
+    da_fn_augment = offline_da_fn(image_size, image_size, augment=True)
 
     # Get data
     df_train = pd.read_csv(os.path.join(BASE_PATH, "data", "train.csv"))
@@ -48,21 +49,23 @@ def process_splits(repeats, image_size):
                 new_row = dict(row)  # Get row
 
                 # Form new name
-                # new_name = f"{fname}__a{j+1}{ext}"
-                # new_row["filepath"] = new_name
+                new_name = f"{fname}__r{j}{ext}"
+                new_row["filepath"] = new_name
 
                 # Open image
                 img_path = os.path.join(BASE_PATH, "images", f"images512", filename)
                 ori_image = np.array(Image.open(img_path))
                 # if j == 0 and i <= 5:  # Preview (debugging)
                 #     Image.fromarray(ori_image).show()
-
-                # Perform augmentation
-                sample = da_fn(image=ori_image)
+                if j==0:
+                    sample = da_fn_noaugment(image=ori_image)
+                else:
+                    # Perform augmentation
+                    sample = da_fn_augment(image=ori_image)
                 image = sample['image']
 
                 # Save image
-                img_savepath = os.path.join(SAVE_PATH, "images", f"images{image_size}", filename)
+                img_savepath = os.path.join(SAVE_PATH, "images", f"images{image_size}", new_name)
                 image = Image.fromarray(image)
                 image.save(img_savepath)
 
@@ -103,6 +106,7 @@ def process_masks(image_size):
 
     print("Done!")
 
+
 if __name__ == "__main__":
-    # process_splits(image_size=512)
-    process_masks(image_size=512)
+    process_splits(repeats=16, image_size=512)
+    # process_masks(image_size=512)
