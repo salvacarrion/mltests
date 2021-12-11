@@ -1,17 +1,66 @@
 import os
 from pathlib import Path
 from itertools import islice
+from shutil import copyfile
+import subprocess
+import re
+import random
+random.seed(123)
+
+import unicodedata
+from tqdm import tqdm
+
+from translation.paper1.build_datasets.utils import *
 
 
-def get_translation_files(src_lang, trg_lang):
-    files = []
-    for split in ["train", "val", "test"]:
-        for lang in [src_lang, trg_lang]:
-            files.append(f"{split}.{lang}")
-    return files
+def create_splits(base_path, datasets, val_size=5000, test_size=5000, shuffle=True):
+    print("Creating splits...")
+
+    # LEVEL 0: Dataset names
+    for ds in datasets:  # Dataset
+        ds_name = ds["name"]
+
+        # LEVEL 1: Sizes
+        for ds_size_name, ds_max_lines in [("original", None)]:  # Lengths
+
+            # LEVEL 2: Languages
+            for lang_pair in ds["languages"]:  # Languages
+                src_lang, trg_lang = lang_pair.split("-")
+
+                # Read raw files
+                raw_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "raw")
+                print(f"\t=> Processing raw files: {raw_path}")
+                with open(os.path.join(raw_path, f"data.{src_lang}"), 'r') as f:
+                    src_lines = f.readlines()
+                with open(os.path.join(raw_path, f"data.{trg_lang}"), 'r') as f:
+                    trg_lines = f.readlines()
+
+                # Clean lines
+                lines = preprocess_pairs(src_lines, trg_lines, shuffle=shuffle)
+
+                # Create partitions
+                train_lines = lines[:-(val_size+test_size)]
+                val_lines = lines[-(val_size+test_size):-test_size]
+                test_lines = lines[-test_size:]
+                splits = [(train_lines, "train"), (val_lines, "val"), (test_lines, "test")]
+
+                # Create splits folder
+                splits_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "splits")
+                path = Path(splits_path)
+                path.mkdir(parents=True, exist_ok=True)
+
+                # Save partitions
+                for split_lines, split_name in splits:
+                    for i, split_lang in enumerate([src_lang, trg_lang]):  # Languages
+                        savepath = os.path.join(splits_path, f"{split_name}.{split_lang}")
+                        with open(savepath, 'w') as fs:
+                            lines = [line[i] + '\n' for line in split_lines]  # split_lines is a tuple (src, trg)
+                            fs.writelines(lines)
 
 
-def check_datasets(base_path, datasets, autofix=False):
+def create_reduced_versions(base_path, datasets, autofix=False):
+    print("Creating reduced versions...")
+
     # LEVEL 0: Dataset names
     for ds in datasets:  # Dataset
         ds_name = ds["name"]
@@ -65,7 +114,9 @@ def check_datasets(base_path, datasets, autofix=False):
     return True
 
 
-def tokenize_files(base_path, datasets):
+def pretokenize(base_path, datasets):
+    print("Pretokenizing splits...")
+
     # 1. Normalization => Whitespace, Strip accents, Unicode normalization,...
     # 2. Pre-Tokenization => Split text into "words" (hello world !)
     # 3. (subword) Tokenizer => BPE, Unigram, WordPiece,...
@@ -79,37 +130,99 @@ def tokenize_files(base_path, datasets):
                 trans_files = get_translation_files(src_lang, trg_lang)
 
                 # Create folder
-                ds_level_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "cleaned")
-                path = Path(ds_level_path)
+                pretokenize_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "pretokenized")
+                path = Path(pretokenize_path)
                 path.mkdir(parents=True, exist_ok=True)
 
                 # Process each file
+                print(f"\t=> Pretokenizing: {pretokenize_path}")
                 for trans_fname in trans_files:
+                    file_lang = trans_fname.split(".")[-1]
                     ori_filename = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "splits", trans_fname)
-                    new_filename = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "cleaned", trans_fname)
-                    asd = 3
+                    new_filename = os.path.join(pretokenize_path, trans_fname)
 
-                    raise NotImplementedError()
+                    # Tokenize (sacremoses): https://github.com/alvations/sacremoses
+                    command = f"sacremoses -j$(nproc) -l {file_lang} tokenize < {ori_filename} > {new_filename}"
+                    subprocess.call(['/bin/bash', '-i', '-c', command])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
+
+
+def build_vocab(base_path, datasets, use_pretokenized=False, merge_trains=True,
+                model_type="unigram", vocab_size=8000, character_coverage=1.0):
+    print("Building vocabs...")
+
+    for ds in datasets:  # Dataset
+        ds_name = ds["name"]
+        for ds_size_name, ds_max_lines in ds["sizes"]:  # Lengths
+            for lang_pair in ds["languages"]:  # Languages
+                src_lang, trg_lang = lang_pair.split("-")
+                trans_files = get_translation_files(src_lang, trg_lang)
+
+                # Create dirs
+                vocab_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "vocabs", "spm")
+                vocab_data_path = os.path.join(vocab_path, "data")
+                model_vocab_path = os.path.join(vocab_path, model_type, str(vocab_size))
+                print(f"\t=> Vocabs: {vocab_path}")
+                for p in [vocab_path, vocab_data_path, model_vocab_path]:
+                    path = Path(p)
+                    path.mkdir(parents=True, exist_ok=True)
+
+                # Create joined trained
+                new_filename = os.path.join(vocab_data_path, "train.txt")
+
+                # Concatenate train files
+                if not merge_trains:
+                    raise NotImplementedError("Only merge train files is allowed")
+                else:
+                    # Check if concatenated train file exists
+                    if os.path.isfile(new_filename):
+                        print("\t=> Skipping concatenated train file as it already exists")
+                        # raise IOError("Concatenated train file exists")
+                    else:
+                        # Concat train files
+                        with open(new_filename, 'w') as outfile:
+                            for trans_fname in [f"train.{src_lang}", f"train.{trg_lang}"]:
+                                raw_folder = "splits" if not use_pretokenized else "pretokenized"
+                                ori_filename = os.path.join(base_path, ds_name, ds_size_name, lang_pair, raw_folder, trans_fname)
+                                with open(ori_filename) as infile:
+                                    outfile.write(infile.read())
+
+                # Learn model
+                model_prefix = os.path.join(model_vocab_path, f"spm_{src_lang}-{trg_lang}")
+                command = f"spm_train --input={new_filename} --model_prefix={model_prefix} --vocab_size={vocab_size} --character_coverage={character_coverage} --model_type={model_type}"
+                subprocess.call(['/bin/bash', '-i', '-c', command])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
 
 
 def main(base_path, datasets):
-    # Check and create splits (if needed)
-    check_datasets(base_path, datasets, autofix=True)
+    # Split raw data
+    create_splits(base_path, datasets)
+    asd = 33
 
-    # Cleaned files
-    tokenize_files(base_path, datasets)
+    # Create reduced versions
+    # create_reduced_versions(base_path, datasets, autofix=True)
+
+    # Pretokenize (sacremoses)
+    # pretokenize(base_path, datasets)
+
+    # Create vocabs
+    # for model_type in ["char"]:  # unigram, bpe, char, or word
+    #     for vocab_size in [100]:
+    #         print(f"- Building vocabs: (model_type={model_type}; vocab_size={vocab_size})")
+    #         build_vocab(base_path, datasets, model_type=model_type, vocab_size=vocab_size)
 
 
 if __name__ == "__main__":
-    BASE_PATH = "/Users/salvacarrion/Documents/Programming/Datasets/nn/translation"
+    # Download datasets: https://opus.nlpl.eu/
+
+    # BASE_PATH = "/Users/salvacarrion/Documents/Programming/Datasets/nn/translation"
+    BASE_PATH = "/home/scarrion/datasets/nn/translation"
     DATASETS = [
-        {"name": "commoncrawl", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en"]},
-        {"name": "europarl", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["cs-en", "de-en", "es-en", "fr-en"]},
-        {"name": "iwlst16", "sizes": [("original", None)], "languages": ["de-en"]},
-        {"name": "multi30k", "sizes": [("original", None)], "languages": ["de-en"]},
-        {"name": "newscommentary", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en"]},
-        {"name": "scielo/health", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en", "pt-en"]},
-        {"name": "scielo/biological", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en", "pt-en"]},
+        # {"name": "commoncrawl", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en"]},
+        # {"name": "europarl", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["cs-en", "de-en", "es-en", "fr-en"]},
+        # {"name": "iwlst16", "sizes": [("original", None)], "languages": ["de-en"]},
+        # {"name": "multi30k", "sizes": [("original", None)], "languages": ["de-en"]},
+        # {"name": "newscommentary", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en"]},
+        # {"name": "scielo/health", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en", "pt-en"]},
+        # {"name": "scielo/biological", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en", "pt-en"]},
     ]
 
     # Create datasets

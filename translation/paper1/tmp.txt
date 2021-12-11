@@ -1,0 +1,2 @@
+
+VOCAB_SIZE=8000; spm_train --input=train.txt --model_prefix=scielo_hb_es-en_$VOCAB_SIZE --vocab_size=$VOCAB_SIZE --character_coverage=1 --model_type=unigram
