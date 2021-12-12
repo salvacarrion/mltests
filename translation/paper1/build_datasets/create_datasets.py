@@ -38,6 +38,10 @@ def create_splits(base_path, datasets, val_size=5000, test_size=5000, shuffle=Tr
                 # Clean lines
                 lines = preprocess_pairs(src_lines, trg_lines, shuffle=shuffle)
 
+                # Check size type
+                val_size = int(val_size*len(lines)) if isinstance(val_size, float) else val_size
+                test_size = int(test_size*len(lines)) if isinstance(test_size, float) else test_size
+
                 # Create partitions
                 train_lines = lines[:-(val_size+test_size)]
                 val_lines = lines[-(val_size+test_size):-test_size]
@@ -193,9 +197,9 @@ def build_vocab(base_path, datasets, use_pretokenized=False, merge_trains=True,
 
 
 def main(base_path, datasets):
+    pass
     # Split raw data
-    create_splits(base_path, datasets)
-    asd = 33
+    # create_splits(base_path, datasets, val_size=0.15, test_size=0.15)
 
     # Create reduced versions
     # create_reduced_versions(base_path, datasets, autofix=True)
@@ -204,8 +208,8 @@ def main(base_path, datasets):
     # pretokenize(base_path, datasets)
 
     # Create vocabs
-    # for model_type in ["char"]:  # unigram, bpe, char, or word
-    #     for vocab_size in [100]:
+    # for model_type in ["char", "unigram"]:  # unigram, bpe, char, or word
+    #     for vocab_size in [16000]:
     #         print(f"- Building vocabs: (model_type={model_type}; vocab_size={vocab_size})")
     #         build_vocab(base_path, datasets, model_type=model_type, vocab_size=vocab_size)
 
@@ -216,6 +220,8 @@ if __name__ == "__main__":
     # BASE_PATH = "/Users/salvacarrion/Documents/Programming/Datasets/nn/translation"
     BASE_PATH = "/home/scarrion/datasets/nn/translation"
     DATASETS = [
+        {"name": "ccaligned", "sizes": [("original", None)], "languages": ["ti-en"]},
+
         # {"name": "commoncrawl", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en"]},
         # {"name": "europarl", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["cs-en", "de-en", "es-en", "fr-en"]},
         # {"name": "iwlst16", "sizes": [("original", None)], "languages": ["de-en"]},
