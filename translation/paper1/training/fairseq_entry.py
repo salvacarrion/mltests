@@ -17,19 +17,20 @@ from translation.paper1.build_datasets.utils import *
 CONDA_ENVNAME = "fairseq"
 
 
-def fairseq_model(data_path, run_name, src_lang, trg_lang, use_pretokenized, force_overwrite):
+def fairseq_model(data_path, run_name, eval_name, src_lang, trg_lang, use_pretokenized, force_overwrite):
     # Create path (if needed)
     preprocess_path = os.path.join(data_path, "models", "fairseq")
     path = Path(preprocess_path)
     path.mkdir(parents=True, exist_ok=True)
 
     # Preprocess files
-    fairseq_preprocess(data_path, src_lang, trg_lang, use_pretokenized, force_overwrite)
+    # fairseq_preprocess(data_path, src_lang, trg_lang, use_pretokenized, force_overwrite)
 
     # Train model
-    fairseq_train(data_path, run_name, force_overwrite)
+    # fairseq_train(data_path, run_name, force_overwrite)
 
     # Evaluate
+    fairseq_translate(data_path, run_name, eval_name, src_lang, trg_lang, force_overwrite, beams=[5])
 
 
 def fairseq_preprocess(data_path, src_lang, trg_lang, use_pretokenized, force_overwrite):
@@ -52,7 +53,6 @@ def fairseq_preprocess(data_path, src_lang, trg_lang, use_pretokenized, force_ov
         # Run command
         preprocess_cmd = f"fairseq-preprocess --source-lang {src_lang} --target-lang {trg_lang} --trainpref {train_path} --validpref {val_path} --testpref {test_path} --destdir {data_bin_path}"
         subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {preprocess_cmd}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
-        asd = 3
 
 
 def fairseq_train(data_path, run_name, force_overwrite):
@@ -63,15 +63,15 @@ def fairseq_train(data_path, run_name, force_overwrite):
 
     # Check if data-bin exists
     res = "y"
-    if not force_overwrite and os.path.exists(checkpoints_path):
+    if False and not force_overwrite and os.path.exists(checkpoints_path):
         print("There are checkpoints in this experiment.")
-        res = input("Do you want to continue? (y/N): ").strip().lower()
+        res = input("Do you want to continue [y/N]? ").strip().lower()
 
     # Check if we can continue with the training
     if res != "y":
         print("Training cancelled.")
     else:
-        wait_seconds = 2
+        wait_seconds = 1
         print(f"[IMPORTANT]: Training overwrite is enabled. (Waiting {wait_seconds} seconds)")
         time.sleep(wait_seconds)
 
@@ -111,18 +111,18 @@ def fairseq_train(data_path, run_name, force_overwrite):
         # Add checkpoint stuff
         train_command += [
             f"--save-dir {checkpoints_path}",
-            "--best-checkpoint-metric bleu",
-            "--maximize-best-checkpoint-metric",
             "--no-epoch-checkpoints",
+            "--maximize-best-checkpoint-metric",
+            #"--best-checkpoint-metric bleu",
             ]
 
         # Add evaluation stuff
-        train_command += [
-            "--eval-bleu",
-            "--eval-bleu-args '{\"beam\": 5}'",
-            "--eval-bleu-detok moses",
-            "--eval-bleu-print-samples",
-        ]
+        # train_command += [
+        #     "--eval-bleu",
+        #     "--eval-bleu-args '{\"beam\": 5}'",
+        #     "--eval-bleu-detok moses",
+        #     "--eval-bleu-print-samples",
+        # ]
 
         # Logs and stuff
         train_command += [
@@ -135,3 +135,41 @@ def fairseq_train(data_path, run_name, force_overwrite):
         # Run command
         train_command = " ".join(train_command)
         subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {train_command}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
+
+
+def fairseq_translate(data_path, checkpoint_path, output_path, src_lang, trg_lang, force_overwrite, beam_width=5, max_length=200):
+    # Check if data-bin exists
+    res = "y"
+    if False and not force_overwrite and os.path.exists(output_path):
+        print("There are evaluations in this experiment.")
+        res = input("Do you want to continue [y/N]? ").strip().lower()
+
+    # Check if we can continue with the training
+    if res != "y":
+        print("Evaluation cancelled.")
+    else:
+        wait_seconds = 1
+        print(f"[IMPORTANT]: Evaluation overwrite is enabled. (Waiting {wait_seconds} seconds)")
+        time.sleep(wait_seconds)
+
+        # Write command
+        gen_command = [f"fairseq-generate {data_path}"]
+
+        # Add stuff
+        gen_command += [
+            f"--source-lang {src_lang}",
+            f"--target-lang {trg_lang}",
+            f"--path {checkpoint_path}",
+            f"--results-path {output_path}",
+            f"--beam {beam_width}",
+            f"--max-len-a {0}",  # max_len = ax+b
+            f"--max-len-b {max_length}",
+            f"--nbest 1",
+            "--skip-invalid-size-inputs-valid-test",
+            "--sacrebleu",
+            "--num-workers $(nproc)",
+        ]
+
+        # Run command
+        gen_command = " ".join(gen_command)
+        subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {gen_command}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813

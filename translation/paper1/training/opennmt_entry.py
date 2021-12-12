@@ -16,7 +16,7 @@ from translation.paper1.build_datasets.utils import *
 CONDA_ENVNAME = "mltests"
 
 
-def opennmt_model(data_path, run_name, src_lang, trg_lang, use_pretokenized, force_overwrite):
+def opennmt_model(data_path, run_name, eval_name, src_lang, trg_lang, use_pretokenized, force_overwrite):
     # Create path (if needed)
     preprocess_path = os.path.join(data_path, "models", "opennmt")
     path = Path(preprocess_path)
