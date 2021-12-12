@@ -1,3 +1,4 @@
+import datetime
 import os
 from pathlib import Path
 from itertools import islice
@@ -11,10 +12,13 @@ import unicodedata
 from tqdm import tqdm
 
 from translation.paper1.build_datasets.utils import *
+from translation.paper1.training import fairseq_entry, opennmt_entry
+
+CONDA_OPENNMT_ENVNAME = "mltests"
 
 
-def train_model(base_path, datasets, model_type="unigram", vocab_size=8000):
-    print("Building vocabs...")
+def train_model(toolkit, base_path, datasets, run_name, subword_model, vocab_size, use_pretokenized, force_overwrite):
+    print(f"- Training model: (run_name={run_name}, subword_model={subword_model}; vocab_size={vocab_size})")
 
     for ds in datasets:  # Dataset
         ds_name = ds["name"]
@@ -22,17 +26,32 @@ def train_model(base_path, datasets, model_type="unigram", vocab_size=8000):
             for lang_pair in ds["languages"]:  # Languages
                 src_lang, trg_lang = lang_pair.split("-")
 
-                # Learn model
-                command = f""
-                subprocess.call(['/bin/bash', '-i', '-c', command])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
+                # Get dataset path
+                ds_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair)
+
+                # Run model
+                if toolkit == "fairseq":
+                    fairseq_entry.fairseq_model(ds_path, run_name, src_lang, trg_lang, use_pretokenized, force_overwrite)
+                elif toolkit == "opennmt":
+                    opennmt_entry.opennmt_model(ds_path, run_name, src_lang, trg_lang, use_pretokenized, force_overwrite)
+                else:
+                    raise NotImplementedError(f"Unknown toolkit: {toolkit}")
 
 
-def main(base_path, datasets):
+def main(base_path, datasets, use_pretokenized=False, prefix="exp1_transformer", toolkit="fairseq", force_overwrite=False):
     # Train range of models
-    for model_type in ["char", "unigram"]:  # unigram, bpe, char, or word
+    for subword_model in ["word"]:  # unigram, bpe, char, or word
         for vocab_size in [16000]:
-            print(f"- Training model: (model_type={model_type}; vocab_size={vocab_size})")
-            train_model(base_path, datasets, model_type=model_type, vocab_size=vocab_size)
+            flag_pretok = (subword_model == "word" or use_pretokenized)
+
+            # Run name
+            dt = datetime.datetime.today()
+            run_name = f"{prefix}"
+            # run_name = f"{prefix}__{dt.year}_{dt.month}_{dt.day}_{dt.hour}_{dt.minute}_{dt.second}"
+
+            # Train model
+            train_model(toolkit, base_path, datasets, run_name,  subword_model=subword_model, vocab_size=vocab_size,
+                        use_pretokenized=flag_pretok, force_overwrite=force_overwrite)
 
 
 if __name__ == "__main__":
@@ -41,7 +60,8 @@ if __name__ == "__main__":
     # BASE_PATH = "/Users/salvacarrion/Documents/Programming/Datasets/nn/translation"
     BASE_PATH = "/home/scarrion/datasets/nn/translation"
     DATASETS = [
-        {"name": "ccaligned", "sizes": [("original", None)], "languages": ["ti-en"]},
+        {"name": "multi30k", "sizes": [("original", None)], "languages": ["de-en"]},
+        # {"name": "ccaligned", "sizes": [("original", None)], "languages": ["ti-en"]},
 
         # {"name": "commoncrawl", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en"]},
         # {"name": "europarl", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["cs-en", "de-en", "es-en", "fr-en"]},

@@ -1,0 +1,137 @@
+import datetime
+import os
+import time
+from pathlib import Path
+from itertools import islice
+from shutil import copyfile
+import subprocess
+import re
+import random
+random.seed(123)
+
+import unicodedata
+from tqdm import tqdm
+
+from translation.paper1.build_datasets.utils import *
+
+CONDA_ENVNAME = "fairseq"
+
+
+def fairseq_model(data_path, run_name, src_lang, trg_lang, use_pretokenized, force_overwrite):
+    # Create path (if needed)
+    preprocess_path = os.path.join(data_path, "models", "fairseq")
+    path = Path(preprocess_path)
+    path.mkdir(parents=True, exist_ok=True)
+
+    # Preprocess files
+    fairseq_preprocess(data_path, src_lang, trg_lang, use_pretokenized, force_overwrite)
+
+    # Train model
+    fairseq_train(data_path, run_name, force_overwrite)
+
+    # Evaluate
+
+
+def fairseq_preprocess(data_path, src_lang, trg_lang, use_pretokenized, force_overwrite):
+    # Create path (if needed)
+    toolkit_path = os.path.join(data_path, "models", "fairseq")
+    path = Path(toolkit_path)
+    path.mkdir(parents=True, exist_ok=True)
+
+    # Check if data-bin exists
+    data_bin_path = os.path.join(toolkit_path, "data-bin")
+    if not force_overwrite and os.path.exists(data_bin_path):
+        print("\t=> Skipping preprocessing as it already exists")
+    else:
+        # Preprocess
+        raw_folder = "splits" if not use_pretokenized else "pretokenized"
+        train_path = os.path.join(data_path, raw_folder, "train")
+        val_path = os.path.join(data_path, raw_folder, "val")
+        test_path = os.path.join(data_path, raw_folder, "test")
+
+        # Run command
+        preprocess_cmd = f"fairseq-preprocess --source-lang {src_lang} --target-lang {trg_lang} --trainpref {train_path} --validpref {val_path} --testpref {test_path} --destdir {data_bin_path}"
+        subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {preprocess_cmd}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
+        asd = 3
+
+
+def fairseq_train(data_path, run_name, force_overwrite):
+    toolkit_path = os.path.join(data_path, "models", "fairseq")
+    data_bin_path = os.path.join(toolkit_path, "data-bin")
+    checkpoints_path = os.path.join(toolkit_path, "runs", run_name, "checkpoints")
+    logs_path = os.path.join(toolkit_path, "runs", run_name, "logs")
+
+    # Check if data-bin exists
+    res = "y"
+    if not force_overwrite and os.path.exists(checkpoints_path):
+        print("There are checkpoints in this experiment.")
+        res = input("Do you want to continue? (y/N): ").strip().lower()
+
+    # Check if we can continue with the training
+    if res != "y":
+        print("Training cancelled.")
+    else:
+        wait_seconds = 2
+        print(f"[IMPORTANT]: Training overwrite is enabled. (Waiting {wait_seconds} seconds)")
+        time.sleep(wait_seconds)
+
+        # Write command
+        train_command = [f"fairseq-train {data_bin_path}"]
+
+        # Add model
+        train_command += [
+            "--arch transformer",
+            "--encoder-embed-dim 256",
+            "--decoder-embed-dim 256",
+            "--encoder-layers 3",
+            "--decoder-layers 3",
+            "--encoder-attention-heads 8",
+            "--decoder-attention-heads 8",
+            "--encoder-ffn-embed-dim 512",
+            "--decoder-ffn-embed-dim 512",
+            "--dropout 0.1",
+        ]
+
+        # Add training stuff
+        train_command += [
+            "--lr 0.001",
+            "--optimizer adam",
+            "--criterion cross_entropy",
+            "--batch-size 128",
+            "--max-epoch 10",
+            "--clip-norm 0.0",
+            "--update-freq 1",
+            "--warmup-updates 4000",
+            "--patience 10",
+            "--seed 1234",
+            #"--max-tokens 4096",
+            #"--lr-scheduler reduce_lr_on_plateau",
+           ]
+
+        # Add checkpoint stuff
+        train_command += [
+            f"--save-dir {checkpoints_path}",
+            "--best-checkpoint-metric bleu",
+            "--maximize-best-checkpoint-metric",
+            "--no-epoch-checkpoints",
+            ]
+
+        # Add evaluation stuff
+        train_command += [
+            "--eval-bleu",
+            "--eval-bleu-args '{\"beam\": 5}'",
+            "--eval-bleu-detok moses",
+            "--eval-bleu-print-samples",
+        ]
+
+        # Logs and stuff
+        train_command += [
+            "--log-format simple",
+            f"--tensorboard-logdir {logs_path}",
+            "--task translation",
+            "--num-workers $(nproc)",
+        ]
+
+        # Run command
+        train_command = " ".join(train_command)
+        subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {train_command}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
