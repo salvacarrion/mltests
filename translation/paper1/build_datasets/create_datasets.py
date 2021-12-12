@@ -118,7 +118,7 @@ def create_reduced_versions(base_path, datasets, autofix=False):
     return True
 
 
-def pretokenize(base_path, datasets):
+def pretokenize(base_path, datasets, force_overwrite=False):
     print("Pretokenizing splits...")
 
     # 1. Normalization => Whitespace, Strip accents, Unicode normalization,...
@@ -145,14 +145,18 @@ def pretokenize(base_path, datasets):
                     ori_filename = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "splits", trans_fname)
                     new_filename = os.path.join(pretokenize_path, trans_fname)
 
-                    # Tokenize (sacremoses): https://github.com/alvations/sacremoses
-                    command = f"sacremoses -j$(nproc) -l {file_lang} tokenize < {ori_filename} > {new_filename}"
-                    subprocess.call(['/bin/bash', '-i', '-c', command])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
+                    # Check if the pretokenized files already exists
+                    if not force_overwrite and os.path.exists(new_filename):
+                        print("\t\t=> Skipping pretokenization as this file already exists")
+                    else:
+                        # Tokenize (sacremoses): https://github.com/alvations/sacremoses
+                        command = f"sacremoses -j$(nproc) -l {file_lang} tokenize < {ori_filename} > {new_filename}"
+                        subprocess.call(['/bin/bash', '-i', '-c', command])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
 
 
 def build_vocab(base_path, datasets, use_pretokenized=False, merge_trains=True,
-                model_type="unigram", vocab_size=8000, character_coverage=1.0):
-    print("Building vocabs...")
+                subword_model="unigram", vocab_size=8000, character_coverage=1.0, force_overwrite=False):
+    print(f"- Building vocabs: (subword_model={subword_model}; vocab_size={vocab_size})")
 
     for ds in datasets:  # Dataset
         ds_name = ds["name"]
@@ -164,22 +168,23 @@ def build_vocab(base_path, datasets, use_pretokenized=False, merge_trains=True,
                 # Create dirs
                 vocab_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "vocabs", "spm")
                 vocab_data_path = os.path.join(vocab_path, "data")
-                model_vocab_path = os.path.join(vocab_path, model_type, str(vocab_size))
-                print(f"\t=> Vocabs: {vocab_path}")
+                model_vocab_path = os.path.join(vocab_path, subword_model, str(vocab_size))
+                print(f"\t=> Build vocab for: {vocab_path}")
                 for p in [vocab_path, vocab_data_path, model_vocab_path]:
                     path = Path(p)
                     path.mkdir(parents=True, exist_ok=True)
 
                 # Create joined trained
-                new_filename = os.path.join(vocab_data_path, "train.txt")
+                tr_fname = "train_pretok.txt" if use_pretokenized else "train_raw.txt"
+                new_filename = os.path.join(vocab_data_path, tr_fname)
 
                 # Concatenate train files
                 if not merge_trains:
                     raise NotImplementedError("Only merge train files is allowed")
                 else:
                     # Check if concatenated train file exists
-                    if os.path.isfile(new_filename):
-                        print("\t=> Skipping concatenated train file as it already exists")
+                    if not force_overwrite and os.path.isfile(new_filename):
+                        print("\t\t=> Skipping concatenated train file as it already exists")
                         # raise IOError("Concatenated train file exists")
                     else:
                         # Concat train files
@@ -192,26 +197,30 @@ def build_vocab(base_path, datasets, use_pretokenized=False, merge_trains=True,
 
                 # Learn model
                 model_prefix = os.path.join(model_vocab_path, f"spm_{src_lang}-{trg_lang}")
-                command = f"spm_train --input={new_filename} --model_prefix={model_prefix} --vocab_size={vocab_size} --character_coverage={character_coverage} --model_type={model_type}"
-                subprocess.call(['/bin/bash', '-i', '-c', command])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
+                if not force_overwrite and os.path.exists(model_prefix+".vocab"):
+                    print("\t\t=> Skipping spm training as it already exists")
+                else:
+                    command = f"spm_train --input={new_filename} --model_prefix={model_prefix} --vocab_size={vocab_size} --character_coverage={character_coverage} --model_type={subword_model}"
+                    subprocess.call(['/bin/bash', '-i', '-c', command])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
 
 
-def main(base_path, datasets):
-    pass
+def main(base_path, datasets, use_pretokenized=False, force_overwrite=False):
     # Split raw data
     # create_splits(base_path, datasets, val_size=0.15, test_size=0.15)
 
     # Create reduced versions
-    # create_reduced_versions(base_path, datasets, autofix=True)
+    create_reduced_versions(base_path, datasets, autofix=True)
 
     # Pretokenize (sacremoses)
-    # pretokenize(base_path, datasets)
+    if use_pretokenized:
+        pretokenize(base_path, datasets, force_overwrite=force_overwrite)
 
     # Create vocabs
-    # for model_type in ["char", "unigram"]:  # unigram, bpe, char, or word
-    #     for vocab_size in [16000]:
-    #         print(f"- Building vocabs: (model_type={model_type}; vocab_size={vocab_size})")
-    #         build_vocab(base_path, datasets, model_type=model_type, vocab_size=vocab_size)
+    for subword_model in ["word"]:  # unigram, bpe, char, or word
+        for vocab_size in [16000]:
+            flag_pretok = (subword_model == "word" or use_pretokenized)
+            build_vocab(base_path, datasets, subword_model=subword_model, vocab_size=vocab_size,
+                        use_pretokenized=flag_pretok, force_overwrite=force_overwrite)
 
 
 if __name__ == "__main__":
@@ -220,12 +229,14 @@ if __name__ == "__main__":
     # BASE_PATH = "/Users/salvacarrion/Documents/Programming/Datasets/nn/translation"
     BASE_PATH = "/home/scarrion/datasets/nn/translation"
     DATASETS = [
-        {"name": "ccaligned", "sizes": [("original", None)], "languages": ["ti-en"]},
+        # {"name": "europarl", "sizes": [("original", None), ("50k", 50000)], "languages": ["es-en"]},
+        {"name": "multi30k", "sizes": [("original", None)], "languages": ["de-en"]},
+
+        # {"name": "ccaligned", "sizes": [("original", None)], "languages": ["ti-en"]},
 
         # {"name": "commoncrawl", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en"]},
         # {"name": "europarl", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["cs-en", "de-en", "es-en", "fr-en"]},
         # {"name": "iwlst16", "sizes": [("original", None)], "languages": ["de-en"]},
-        # {"name": "multi30k", "sizes": [("original", None)], "languages": ["de-en"]},
         # {"name": "newscommentary", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en"]},
         # {"name": "scielo/health", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en", "pt-en"]},
         # {"name": "scielo/biological", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en", "pt-en"]},
