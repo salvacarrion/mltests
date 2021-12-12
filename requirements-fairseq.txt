@@ -1,0 +1,5 @@
+tensorboardX
+sacremoses
+sacrebleu
+sentencepiece
+subword-nmt
