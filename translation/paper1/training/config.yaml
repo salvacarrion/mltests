@@ -1,0 +1,101 @@
+# ccaligned_original_ti-en__transformer_unigram_16000.yaml
+
+# Execute:
+#     - Build vocabs:  onmt_build_vocab -config config.yaml -n_sample -1
+#     - Train: onmt_train -config config.yaml
+#     - Translate: onmt_translate -model models/run/checkpoints/model_step_2000.pt -src splits/test.ti  -tgt splits/test.en -output eval/hyp.txt -verbose
+#     - Decode: spm_decode --model=../vocabs/spm/unigram/16000/spm_ti-en.model --input_format=piece < hyp.txt > hyp2.txt
+#     - Score:  sacrebleu ../splits/test.en -i hyp2.txt -m bleu -b -w 4
+
+
+##### Build vocabs #############################
+
+## Prevent overwriting existing files in the folder
+overwrite: true
+
+## Use seed for reproducibility
+seed: 123
+
+## Where the samples will be written
+save_data: models/run/example
+
+## Datasets
+data:
+    train:
+        path_src: splits/train.ti
+        path_tgt: splits/train.en
+        transforms: [sentencepiece, filtertoolong]
+        weight: 1
+    valid:
+        path_src: splits/val.ti
+        path_tgt: splits/val.en
+        transforms: [sentencepiece]
+
+## Where the vocab(s) will be written
+src_vocab: models/run/opennmt-vocab.src
+tgt_vocab: models/run/opennmt-vocab.tgt
+
+## Subword model
+src_subword_model: vocabs/spm/unigram/16000/spm_ti-en.model
+tgt_subword_model: vocabs/spm/unigram/16000/spm_ti-en.model
+src_subword_nbest: 1
+tgt_subword_nbest: 1
+src_subword_alpha: 0.0
+tgt_subword_alpha: 0.0
+
+## Filter
+src_seq_length: 350
+tgt_seq_length: 350
+
+
+##### Training #############################
+
+# General opts
+save_model: models/run/checkpoints/model
+keep_checkpoint: 3
+save_checkpoint_steps: 1000
+average_decay: 0.0005
+report_every: 100
+train_steps: 10000
+valid_steps: 1000
+
+# Batching
+queue_size: 10000
+bucket_size: 32768
+world_size: 2
+gpu_ranks: [0, 1]
+batch_type: "tokens"
+batch_size: 4096
+batch_size_multiple: 1
+valid_batch_size: 16
+max_generator_batches: 0
+accum_count: [3]
+accum_steps: [0]
+
+# Optimization
+model_dtype: "fp32"
+optim: "adam"
+learning_rate: 2
+warmup_steps: 500
+decay_method: "noam"
+adam_beta2: 0.998
+max_grad_norm: 0
+label_smoothing: 0.1
+param_init: 0
+param_init_glorot: true
+normalization: "tokens"
+
+# Model
+encoder_type: transformer
+decoder_type: transformer
+enc_layers: 3
+dec_layers: 3
+heads: 4
+rnn_size: 256
+word_vec_size: 256
+transformer_ff: 1024
+dropout_steps: [0]
+dropout: [0.1]
+attention_dropout: [0.1]
+share_decoder_embeddings: false
+share_embeddings: false
