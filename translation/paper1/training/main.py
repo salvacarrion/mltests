@@ -12,7 +12,7 @@ import unicodedata
 from tqdm import tqdm
 
 from translation.paper1.build_datasets.utils import *
-from translation.paper1.training import fairseq_entry, opennmt_entry
+from translation.paper1.training import fairseq_entry, opennmt_entry, common_entry
 
 CONDA_OPENNMT_ENVNAME = "mltests"
 
@@ -72,11 +72,16 @@ def evaluate(toolkit, base_path, train_datasets, eval_datasets, run_name, subwor
                 # Evaluate model
                 for chkpt_fname in ["checkpoint_best.pt"]:
                     checkpoint_path = os.path.join(train_ds_path, "models", toolkit, "runs", run_name, "checkpoints", chkpt_fname)
-                    output_path = os.path.join(train_ds_path, "models", toolkit, "eval")
-                    evaluate_model(toolkit, base_path, eval_datasets, run_name, checkpoint_path, output_path, beams, force_overwrite)
+                    output_path = os.path.join(train_ds_path, "models", toolkit, "runs", run_name, "eval")
+                    spm_model_path = os.path.join(train_ds_path, "vocabs", "spm", subword_model, str(vocab_size), f"spm_{src_lang}-{trg_lang}.model")
+                    evaluate_model(toolkit=toolkit, base_path=base_path, eval_datasets=eval_datasets, run_name=run_name,
+                                   checkpoint_path=checkpoint_path, output_path=output_path, beams=beams,
+                                   subword_model=subword_model, spm_model_path=spm_model_path,
+                                   force_overwrite=force_overwrite)
 
 
-def evaluate_model(toolkit, base_path, eval_datasets, run_name, checkpoint_path, output_path, beams, force_overwrite):
+def evaluate_model(toolkit, base_path, eval_datasets, run_name, checkpoint_path, output_path, beams, subword_model,
+                   spm_model_path, force_overwrite):
     print(f"- Evaluate model: (run_name= {run_name}, checkpoint_path={checkpoint_path}, beams={str(beams)}])")
 
     for ds in eval_datasets:  # Dataset name (to evaluate)
@@ -96,13 +101,19 @@ def evaluate_model(toolkit, base_path, eval_datasets, run_name, checkpoint_path,
                     ds_eval_path = os.path.join(ds_path, "models", "fairseq", "data-bin")
                     for beam in beams:
                         # Create outpath (if needed)
-                        output_path = os.path.join(output_path, run_name, eval_name, "beams", f"beam_{beam}")
-                        path = Path(output_path)
+                        beam_output_path = os.path.join(output_path, eval_name, "beams", f"beam_{beam}")
+                        path = Path(beam_output_path)
                         path.mkdir(parents=True, exist_ok=True)
 
                         # Translate
-                        fairseq_entry.fairseq_translate(ds_eval_path, checkpoint_path, output_path, src_lang, trg_lang,
-                                                        force_overwrite, beam_width=beam)
+                        fairseq_entry.fairseq_translate(data_path=ds_eval_path, checkpoint_path=checkpoint_path,
+                                                        output_path=beam_output_path, src_lang=src_lang, trg_lang=trg_lang,
+                                                        subword_model=subword_model, spm_model_path=spm_model_path,
+                                                        force_overwrite=force_overwrite, beam_width=beam)
+
+                        # Score
+                        common_entry.score_test_files(data_path=beam_output_path, src_lang=src_lang, trg_lang=trg_lang,
+                                                      force_overwrite=force_overwrite)
                 else:
                     raise NotImplementedError(f"Unknown toolkit: {toolkit}")
 
@@ -111,7 +122,8 @@ if __name__ == "__main__":
     # Download datasets: https://opus.nlpl.eu/
 
     RUN_NAME = "mymodel"
-    BASE_PATH = "/home/scarrion/datasets/nn/translation"
+    # BASE_PATH = "/home/scarrion/datasets/nn/translation"
+    BASE_PATH = "/home/salva/Documents/datasets/nn/translation"
     SUBWORD_MODELS = ["word"]  # unigram, bpe, char, or word
     VOCAB_SIZE = [16000]
     BEAMS = [5]
@@ -135,16 +147,16 @@ if __name__ == "__main__":
         for voc_size in VOCAB_SIZE:
             flag_pretok = (sw_model == "word" or FORCE_PRETOKENIZED)
 
-            # Preprocess datasets
-            preprocess(TOOLKIT, BASE_PATH, datasets=DATASETS, subword_model=sw_model, vocab_size=voc_size,
-                       use_pretokenized=flag_pretok, force_overwrite=FORCE_OVERWRITE)
-
-            # Train model
-            train(TOOLKIT, BASE_PATH, datasets=DATASETS, run_name=RUN_NAME, subword_model=sw_model, vocab_size=voc_size,
-                  force_overwrite=FORCE_OVERWRITE)
+            # # Preprocess datasets
+            # preprocess(toolkit=TOOLKIT, base_path=BASE_PATH, datasets=DATASETS, subword_model=sw_model,
+            #            vocab_size=voc_size, use_pretokenized=flag_pretok, force_overwrite=FORCE_OVERWRITE)
+            #
+            # # Train model
+            # train(toolkit=TOOLKIT, base_path=BASE_PATH, datasets=DATASETS, run_name=RUN_NAME, subword_model=sw_model,
+            #       vocab_size=voc_size, force_overwrite=FORCE_OVERWRITE)
 
             # Evaluate models
-            evaluate(TOOLKIT, BASE_PATH, train_datasets=DATASETS, eval_datasets=DATASETS,
+            evaluate(toolkit=TOOLKIT, base_path=BASE_PATH, train_datasets=DATASETS, eval_datasets=DATASETS,
                      run_name=RUN_NAME, subword_model=sw_model, vocab_size=voc_size, beams=BEAMS,
                      force_overwrite=FORCE_OVERWRITE)
     print("Done!")

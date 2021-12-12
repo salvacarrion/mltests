@@ -137,7 +137,8 @@ def fairseq_train(data_path, run_name, force_overwrite):
         subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {train_command}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
 
 
-def fairseq_translate(data_path, checkpoint_path, output_path, src_lang, trg_lang, force_overwrite, beam_width=5, max_length=200):
+def fairseq_translate(data_path, checkpoint_path, output_path, src_lang, trg_lang, subword_model, spm_model_path,
+                      force_overwrite, beam_width=5, max_length=200):
     # Check if data-bin exists
     res = "y"
     if False and not force_overwrite and os.path.exists(output_path):
@@ -149,8 +150,9 @@ def fairseq_translate(data_path, checkpoint_path, output_path, src_lang, trg_lan
         print("Evaluation cancelled.")
     else:
         wait_seconds = 1
-        print(f"[IMPORTANT]: Evaluation overwrite is enabled. (Waiting {wait_seconds} seconds)")
-        time.sleep(wait_seconds)
+        if wait_seconds > 0:
+            print(f"[IMPORTANT]: Evaluation overwrite is enabled. (Waiting {wait_seconds} seconds)")
+            time.sleep(wait_seconds)
 
         # Write command
         gen_command = [f"fairseq-generate {data_path}"]
@@ -166,10 +168,35 @@ def fairseq_translate(data_path, checkpoint_path, output_path, src_lang, trg_lan
             f"--max-len-b {max_length}",
             f"--nbest 1",
             "--skip-invalid-size-inputs-valid-test",
-            "--sacrebleu",
+            "--scoring sacrebleu",
             "--num-workers $(nproc)",
         ]
 
         # Run command
         gen_command = " ".join(gen_command)
         subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {gen_command}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
+
+        # Parse output file
+        gen_test_path = os.path.join(output_path, "generate-test.txt")
+        src_tok_path = os.path.join(output_path, "src.tok")
+        ref_tok_path = os.path.join(output_path, "ref.tok")
+        hyp_tok_path = os.path.join(output_path, "hyp.tok")
+        subprocess.call(['/bin/bash', '-i', '-c', f"grep ^S {gen_test_path} | cut -f2- > {src_tok_path}"])
+        subprocess.call(['/bin/bash', '-i', '-c', f"grep ^T {gen_test_path} | cut -f2- > {ref_tok_path}"])
+        subprocess.call(['/bin/bash', '-i', '-c', f"grep ^H {gen_test_path} | cut -f3- > {hyp_tok_path}"])
+
+        # Detokenize
+        src_txt_path = os.path.join(output_path, "src.txt")
+        ref_txt_path = os.path.join(output_path, "ref.txt")
+        hyp_txt_path = os.path.join(output_path, "hyp.txt")
+        if subword_model == "word":
+            src_cmd = f"sacremoses -l {src_lang} -j$(nproc) detokenize < {src_tok_path} > {src_txt_path}"
+            ref_cmd = f"sacremoses -l {trg_lang} -j$(nproc) detokenize < {ref_tok_path} > {ref_txt_path}"
+            hyp_cmd = f"sacremoses -l {trg_lang} -j$(nproc) detokenize < {hyp_tok_path} > {hyp_txt_path}"
+        else:
+            src_cmd = f"spm_decode --model={spm_model_path} --input_format=piece < {src_tok_path} > {src_txt_path}"
+            ref_cmd = f"spm_decode --model={spm_model_path} --input_format=piece < {ref_tok_path} > {ref_txt_path}"
+            hyp_cmd = f"spm_decode --model={spm_model_path} --input_format=piece < {hyp_tok_path} > {hyp_txt_path}"
+        subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {src_cmd}"])
+        subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {ref_cmd}"])
+        subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {hyp_cmd}"])

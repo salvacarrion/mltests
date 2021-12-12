@@ -1,5 +1,7 @@
+fairseq
 tensorboardX
 sacremoses
 sacrebleu
 sentencepiece
 subword-nmt
+
