@@ -13,6 +13,7 @@ import unicodedata
 from tqdm import tqdm
 
 from translation.paper1.build_datasets.utils import *
+from translation.paper1 import helpers
 
 CONDA_ENVNAME = "fairseq"
 
@@ -24,19 +25,18 @@ def fairseq_model(data_path, run_name, eval_name, src_lang, trg_lang, use_pretok
     path.mkdir(parents=True, exist_ok=True)
 
     # Preprocess files
-    # fairseq_preprocess(data_path, src_lang, trg_lang, use_pretokenized, force_overwrite)
+    fairseq_preprocess(data_path, src_lang, trg_lang, use_pretokenized, force_overwrite)
 
     # Train model
-    # fairseq_train(data_path, run_name, force_overwrite)
+    fairseq_train(data_path, run_name, force_overwrite)
 
     # Evaluate
     fairseq_translate(data_path, run_name, eval_name, src_lang, trg_lang, force_overwrite, beams=[5])
 
 
-def fairseq_preprocess(data_path, src_lang, trg_lang, subword_model, vocab_size, force_overwrite,
-                       data_bin_path=None):
+def fairseq_preprocess(ds_path, src_lang, trg_lang, subword_model, vocab_size, force_overwrite):
     # Create path (if needed)
-    toolkit_path = os.path.join(data_path, "models", "fairseq")
+    toolkit_path = os.path.join(ds_path, "models", "fairseq")
     path = Path(toolkit_path)
     path.mkdir(parents=True, exist_ok=True)
 
@@ -46,13 +46,16 @@ def fairseq_preprocess(data_path, src_lang, trg_lang, subword_model, vocab_size,
         print("\t=> Skipping preprocessing as it already exists")
     else:
         # Preprocess
-        train_path = os.path.join(data_path, "data", "encoded", subword_model, str(vocab_size), "train")
-        val_path = os.path.join(data_path, "data", "encoded", subword_model, str(vocab_size), "val")
-        test_path = os.path.join(data_path, "data", "encoded", subword_model, str(vocab_size), "test")
+        data_path = os.path.join(ds_path, "data", "encoded", subword_model, str(vocab_size))
+        fairseq_preprocess_with_vocab(data_path, data_bin_path=data_bin_path, src_lang=src_lang, trg_lang=trg_lang)
 
-        # Run command
-        preprocess_cmd = f"fairseq-preprocess --source-lang {src_lang} --target-lang {trg_lang} --trainpref {train_path} --validpref {val_path} --testpref {test_path} --destdir {data_bin_path}"
-        subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {preprocess_cmd}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
+
+def fairseq_preprocess_with_vocab(data_path, data_bin_path, src_lang, trg_lang, src_vocab_path=None, trg_vocab_path=None, train_fname="train", val_fname="val", test_fname="test"):
+    val_fname = f"--validpref {data_path}/{val_fname}" if val_fname else ""
+    cmd = f"fairseq-preprocess --source-lang {src_lang} --target-lang {trg_lang} --trainpref {data_path}/{train_fname} {val_fname} --testpref {data_path}/{test_fname} --destdir {data_bin_path} --workers $(nproc)"
+    cmd += f" --srcdict {src_vocab_path}" if src_vocab_path else ""
+    cmd += f" --tgtdict {trg_vocab_path}" if trg_vocab_path else ""
+    subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {cmd}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
 
 
 def fairseq_train(data_path, run_name, subword_model, vocab_size, force_overwrite):
@@ -190,13 +193,11 @@ def fairseq_translate(data_path, checkpoint_path, output_path, src_lang, trg_lan
         ref_txt_path = os.path.join(output_path, "ref.txt")
         hyp_txt_path = os.path.join(output_path, "hyp.txt")
         if subword_model == "word":
-            src_cmd = f"sacremoses -l {src_lang} -j$(nproc) detokenize < {src_tok_path} > {src_txt_path}"
-            ref_cmd = f"sacremoses -l {trg_lang} -j$(nproc) detokenize < {ref_tok_path} > {ref_txt_path}"
-            hyp_cmd = f"sacremoses -l {trg_lang} -j$(nproc) detokenize < {hyp_tok_path} > {hyp_txt_path}"
+            helpers.moses_detokenizer(src_lang, input_file=src_tok_path, output_file=src_txt_path)
+            helpers.moses_detokenizer(trg_lang, input_file=ref_tok_path, output_file=ref_txt_path)
+            helpers.moses_detokenizer(trg_lang, input_file=hyp_tok_path, output_file=hyp_txt_path)
         else:
-            src_cmd = f"spm_decode --model={spm_model_path} --input_format=piece < {src_tok_path} > {src_txt_path}"
-            ref_cmd = f"spm_decode --model={spm_model_path} --input_format=piece < {ref_tok_path} > {ref_txt_path}"
-            hyp_cmd = f"spm_decode --model={spm_model_path} --input_format=piece < {hyp_tok_path} > {hyp_txt_path}"
-        subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {src_cmd}"])
-        subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {ref_cmd}"])
-        subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {hyp_cmd}"])
+            helpers.spm_decode(spm_model_path, input_file=src_tok_path, output_file=src_txt_path)
+            helpers.spm_decode(spm_model_path, input_file=ref_tok_path, output_file=ref_txt_path)
+            helpers.spm_decode(spm_model_path, input_file=hyp_tok_path, output_file=hyp_txt_path)
+

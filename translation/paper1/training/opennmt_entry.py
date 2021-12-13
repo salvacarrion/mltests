@@ -49,6 +49,5 @@ def opennmt_preprocess(data_path, src_lang, trg_lang, use_pretokenized, force_ov
 
         # Run command
         preprocess_cmd = f""
-        subprocess.call(['/bin/bash', '-i', '-c',
-                         f"conda activate {CONDA_ENVNAME} && {preprocess_cmd}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
+        subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {preprocess_cmd}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
 

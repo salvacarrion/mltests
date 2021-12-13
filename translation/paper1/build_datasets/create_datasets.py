@@ -1,16 +1,13 @@
 import os
 from pathlib import Path
 from itertools import islice
-from shutil import copyfile
-import subprocess
-import re
 import random
 random.seed(123)
 
-import unicodedata
-from tqdm import tqdm
-
 from translation.paper1.build_datasets.utils import *
+from translation.paper1 import helpers
+
+CONDA_ENVNAME = "mltests"
 
 
 def create_splits(base_path, datasets, val_size, test_size, shuffle, force_overwrite):
@@ -121,8 +118,6 @@ def create_reduced_versions(base_path, datasets, autofix):
                                         fout.writelines(lines)
                                         print(f"- Autofix for '{ds_level}': Creating {trans_fname}...")
 
-    return True
-
 
 def pretokenize(base_path, datasets, force_overwrite):
     print("Pretokenizing splits...")
@@ -156,8 +151,7 @@ def pretokenize(base_path, datasets, force_overwrite):
                         print("\t\t=> Skipping pretokenization as this file already exists")
                     else:
                         # Tokenize (sacremoses): https://github.com/alvations/sacremoses
-                        command = f"sacremoses -j$(nproc) -l {file_lang} tokenize < {ori_filename} > {new_filename}"
-                        subprocess.call(['/bin/bash', '-i', '-c', command])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
+                        helpers.moses_tokenizer(lang=file_lang, input_file=ori_filename, output_file=new_filename)
 
 
 def build_vocab(base_path, datasets, encoding_mode, subword_model, vocab_size, character_coverage, merge_trains, force_overwrite):
@@ -200,13 +194,12 @@ def build_vocab(base_path, datasets, encoding_mode, subword_model, vocab_size, c
                                 with open(ori_filename) as infile:
                                     outfile.write(infile.read())
 
-                # Learn model
-                model_prefix = os.path.join(model_vocab_path, f"spm_{src_lang}-{trg_lang}")
-                if not force_overwrite and os.path.exists(model_prefix+".vocab"):
+                # Train model
+                model_prefix = os.path.join(model_vocab_path, f"spm_{src_lang}-{trg_lang}")  # without .model
+                if not force_overwrite and os.path.exists(model_prefix):
                     print("\t\t=> Skipping spm training as it already exists")
                 else:
-                    command = f"spm_train --input={new_filename} --model_prefix={model_prefix} --vocab_size={vocab_size} --character_coverage={character_coverage} --model_type={subword_model} --pad_id=3"
-                    subprocess.call(['/bin/bash', '-i', '-c', command])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
+                    helpers.spm_train(input_file=new_filename, model_prefix=model_prefix, vocab_size=vocab_size, character_coverage=character_coverage, subword_model=subword_model)
 
 
 def encode_datasets(base_path, datasets, encoding_mode, subword_model, vocab_size, min_vocab_frequency, force_overwrite):
@@ -227,7 +220,7 @@ def encode_datasets(base_path, datasets, encoding_mode, subword_model, vocab_siz
 
                 # spm mode path
                 vocab_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "vocabs", "spm")
-                spm_model_path = os.path.join(vocab_path, subword_model, str(vocab_size), f"spm_{src_lang}-{trg_lang}")
+                spm_model_path = os.path.join(vocab_path, subword_model, str(vocab_size), f"spm_{src_lang}-{trg_lang}.model")
 
                 # Create encoded path
                 encoded_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data", "encoded")
@@ -245,12 +238,11 @@ def encode_datasets(base_path, datasets, encoding_mode, subword_model, vocab_siz
                     path = Path(new_filename_dir)
                     path.mkdir(parents=True, exist_ok=True)
 
-                    # Learn model
+                    # Encode files
                     if not force_overwrite and os.path.exists(new_filename):
                         print(f"\t\t=> Skipping encoded file as it already exists: ({fname})")
                     else:
-                        command = f"spm_encode --model={spm_model_path}.model --output_format=piece < {ori_filename} > {new_filename}"  # --vocabulary={spm_model_path}.vocab --vocabulary_threshold={min_vocab_frequency}
-                        subprocess.call(['/bin/bash', '-i', '-c', command])
+                        helpers.spm_encode(spm_model_path=spm_model_path, input_file=ori_filename, output_file=new_filename)
 
 
 def main(base_path, datasets, encoding_mode, subword_models, vocab_sizes, min_vocab_frequency, force_overwrite):
@@ -260,11 +252,11 @@ def main(base_path, datasets, encoding_mode, subword_models, vocab_sizes, min_vo
     if encoding_mode not in {"pretokenized", "encoded", "splits"}:
         raise ValueError(f"'encoded_mode' not valid.")
 
-    # # Split raw data
-    # create_splits(base_path, datasets, val_size=5000, test_size=5000, shuffle=True, force_overwrite=force_overwrite)
-    #
-    # # Create reduced versions
-    # create_reduced_versions(base_path, datasets, autofix=True)
+    # Split raw data
+    create_splits(base_path, datasets, val_size=5000, test_size=5000, shuffle=True, force_overwrite=force_overwrite)
+
+    # Create reduced versions
+    create_reduced_versions(base_path, datasets, autofix=True)
 
     # Pretokenize (sacremoses)
     if encoding_mode == "pretokenized" or "word" in set(subword_models):
@@ -288,19 +280,19 @@ def main(base_path, datasets, encoding_mode, subword_models, vocab_sizes, min_vo
 if __name__ == "__main__":
     # Download datasets: https://opus.nlpl.eu/
 
-    # BASE_PATH = "/home/scarrion/datasets/nn/translation"
-    BASE_PATH = "/home/salva/Documents/datasets/nn/translation"
+    BASE_PATH = "/home/scarrion/datasets/nn/translation"
+    # BASE_PATH = "/home/salva/Documents/datasets/nn/translation"
 
     ENCODING_MODE = "encoded"  # splits (raw), encoded (spm), [pretokenized (moses) => Force moses tokenization for everything]
-    SUBWORD_MODELS = ["word"]  # unigram, bpe, char, or word
+    SUBWORD_MODELS = ["char", "word", "unigram"]  # unigram, bpe, char, or word
     VOCAB_SIZE = [16000]
     MIN_VOCAB_FREQUENCY = 1  # Doesn't work
     FORCE_OVERWRITE = False
 
     DATASETS = [
         {"name": "multi30k", "sizes": [("original", None)], "languages": ["de-en"]},
+        {"name": "europarl", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en"]},
 
-        # {"name": "europarl", "sizes": [("original", None)], "languages": ["el-en"]},
         # {"name": "ccaligned", "sizes": [("original", None)], "languages": ["or-en", "ti-en"]},
         # {"name": "wikimatrix", "sizes": [("original", None)], "languages": ["ar-en", "ja-en", "ko-en"]},
 

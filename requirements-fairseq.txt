@@ -1,7 +1,7 @@
 fairseq
 tensorboardX
 sacremoses
-sacrebleu
+sacrebleu==1.4.*
 sentencepiece
 subword-nmt
 

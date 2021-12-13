@@ -1,19 +1,10 @@
-import datetime
-import glob
 import os
 from pathlib import Path
-from itertools import islice
-from shutil import copyfile
-import subprocess
-import re
 import random
 random.seed(123)
 
-import unicodedata
-from tqdm import tqdm
-
-from translation.paper1.build_datasets.utils import *
-from translation.paper1.training import fairseq_entry, opennmt_entry, common_entry
+from translation.paper1.training import fairseq_entry
+from translation.paper1 import helpers
 
 CONDA_OPENNMT_ENVNAME = "mltests"
 
@@ -67,26 +58,24 @@ def evaluate(toolkit, base_path, train_datasets, eval_datasets, run_name, subwor
             for lang_pair in ds["languages"]:  # Dataset language (of the trained model)
                 src_lang, trg_lang = lang_pair.split("-")
 
-                # Get base path of the trained model
-                train_ds_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair)
+                # Dataset path where the trained model is
+                model_ds_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair)
 
                 # Evaluate model
                 for chkpt_fname in ["checkpoint_best.pt"]:
-                    checkpoint_path = os.path.join(train_ds_path, "models", toolkit, "runs", run_name, "checkpoints", chkpt_fname)
-                    spm_model_path = os.path.join(train_ds_path, "vocabs", "spm", subword_model, str(vocab_size),  f"spm_{src_lang}-{trg_lang}.model")
-                    evaluate_model(toolkit=toolkit, base_path=base_path, train_ds_path=train_ds_path,
+                    checkpoint_path = os.path.join(model_ds_path, "models", toolkit, "runs", run_name, "checkpoints", chkpt_fname)
+                    spm_model_path = os.path.join(model_ds_path, "vocabs", "spm", subword_model, str(vocab_size),  f"spm_{src_lang}-{trg_lang}.model")
+                    evaluate_model(toolkit=toolkit, base_path=base_path, model_ds_path=model_ds_path,
                                    eval_datasets=eval_datasets, run_name=run_name,
                                    checkpoint_path=checkpoint_path, spm_model_path=spm_model_path, beams=beams,
                                    subword_model=subword_model, vocab_size=vocab_size, force_overwrite=force_overwrite)
 
 
-def evaluate_model(toolkit, base_path, train_ds_path, eval_datasets, run_name, checkpoint_path, spm_model_path, beams,
+def evaluate_model(toolkit, base_path, model_ds_path, eval_datasets, run_name, checkpoint_path, spm_model_path, beams,
                    subword_model, vocab_size, force_overwrite):
+    # model_ds_path => Dataset path where the trained model is
+
     print(f"- Evaluate model: (run_name= {run_name}, checkpoint_path={checkpoint_path}, beams={str(beams)}])")
-
-    # Set paths
-    output_path = os.path.join(train_ds_path, "models", toolkit, "runs", run_name, "eval")
-
     for ds in eval_datasets:  # Dataset name (to evaluate)
         ds_name = ds["name"]
         for ds_size_name, ds_max_lines in ds["sizes"]:  # Dataset lengths (to evaluate)
@@ -96,41 +85,47 @@ def evaluate_model(toolkit, base_path, train_ds_path, eval_datasets, run_name, c
                 # Get eval name
                 eval_name = "_".join([ds_name, ds_size_name, lang_pair])
 
-                # Get dataset path (to evaluate)
-                ds_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair)
+                # Get extern dataset path (to evaluate)
+                eval_ds_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair)
 
-                # Create path for encoded files
-                eval_data_path = os.path.join(output_path, eval_name, "data")
-                path = Path(eval_data_path)
+                # Create eval paths for encoded files
+                model_eval_path = os.path.join(model_ds_path, "models", toolkit, "runs", run_name, "eval", eval_name)
+                model_eval_data_path = os.path.join(model_eval_path, "data")
+                path = Path(model_eval_data_path)
                 path.mkdir(parents=True, exist_ok=True)
 
                 # Encode dataset using the SPM of this model
                 for fname in [f"test.{src_lang}", f"test.{trg_lang}"]:
                     raw_folder = "pretokenized" if (subword_model == "word") else "splits"
-                    ori_filename = os.path.join(ds_path, "data", raw_folder, fname)
-                    new_filename = os.path.join(eval_data_path, fname)
+                    ori_filename = os.path.join(eval_ds_path, "data", raw_folder, fname)
+                    new_filename = os.path.join(model_eval_path, "data", fname)
 
                     # Check if the file exists
                     if not force_overwrite and os.path.exists(new_filename):
                         print("\t\t- Skipping eval file encoding as it already exists")
                     else:
-                        command = f"spm_encode --model={spm_model_path} --output_format=piece < {ori_filename} > {new_filename}"  # --vocabulary={spm_model_path}.vocab --vocabulary_threshold={min_vocab_frequency}
-                        subprocess.call(['/bin/bash', '-i', '-c', command])
+                        # Encode files
+                        print(f"\t\t=> Encoding test file: {ori_filename}")
+                        helpers.spm_encode(spm_model_path=spm_model_path, input_file=ori_filename, output_file=new_filename)
 
                 # Select toolkit
                 if toolkit == "fairseq":
                     # Get train vocabulary
-                    src_vocab_path = os.path.join(train_ds_path, "models", "fairseq", "data-bin", subword_model, str(vocab_size), f"dict.{src_lang}.txt")
-                    trg_vocab_path = os.path.join(train_ds_path, "models", "fairseq", "data-bin", subword_model, str(vocab_size), f"dict.{trg_lang}.txt")
+                    vocab_path = os.path.join(model_ds_path, "models", "fairseq", "data-bin", subword_model, str(vocab_size))
+                    src_vocab_path = os.path.join(vocab_path, f"dict.{src_lang}.txt")
+                    trg_vocab_path = os.path.join(vocab_path, f"dict.{trg_lang}.txt")
 
                     # Preprocess data
-                    eval_data_bin_path = os.path.join(output_path, eval_name, "data-bin")
-                    preprocess_cmd = f"fairseq-preprocess --source-lang {src_lang} --target-lang {trg_lang} --trainpref {eval_data_path}/test --testpref {eval_data_path}/test --destdir {eval_data_bin_path} --srcdict {src_vocab_path} --tgtdict {trg_vocab_path} --workers	$(nproc)"
-                    subprocess.call(['/bin/bash', '-i', '-c', f"conda activate fairseq && {preprocess_cmd}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
+                    eval_path = os.path.join(model_ds_path, "models", "fairseq", "runs", run_name, "eval", eval_name)  # (extern) encoded files werw copied here
+                    eval_data_path = os.path.join(eval_path, "data")
+                    eval_data_bin_path = os.path.join(eval_path, "data-bin")
+
+                    # Process raw evaluation files
+                    fairseq_entry.fairseq_preprocess_with_vocab(data_path=eval_data_path, data_bin_path=eval_data_bin_path, src_lang=src_lang, trg_lang=trg_lang, src_vocab_path=src_vocab_path, trg_vocab_path=trg_vocab_path, train_fname="test", val_fname=None)
 
                     for beam in beams:
                         # Create outpath (if needed)
-                        beam_output_path = os.path.join(output_path, eval_name, "beams", f"beam_{beam}")
+                        beam_output_path = os.path.join(eval_path, "beams", f"beam_{beam}")
                         path = Path(beam_output_path)
                         path.mkdir(parents=True, exist_ok=True)
 
@@ -141,8 +136,7 @@ def evaluate_model(toolkit, base_path, train_ds_path, eval_datasets, run_name, c
                                                         force_overwrite=force_overwrite, beam_width=beam)
 
                         # Score
-                        common_entry.score_test_files(data_path=beam_output_path, src_lang=src_lang, trg_lang=trg_lang,
-                                                      force_overwrite=force_overwrite)
+                        helpers.score_test_files(data_path=beam_output_path, src_lang=src_lang, trg_lang=trg_lang, force_overwrite=force_overwrite)
                 else:
                     raise NotImplementedError(f"Unknown toolkit: {toolkit}")
 
@@ -150,8 +144,8 @@ def evaluate_model(toolkit, base_path, train_ds_path, eval_datasets, run_name, c
 if __name__ == "__main__":
     # Download datasets: https://opus.nlpl.eu/
 
-    # BASE_PATH = "/home/scarrion/datasets/nn/translation"
-    BASE_PATH = "/home/salva/Documents/datasets/nn/translation"
+    BASE_PATH = "/home/scarrion/datasets/nn/translation"
+    # BASE_PATH = "/home/salva/Documents/datasets/nn/translation"
 
     ENCODING_MODE = "pretokenized"  # splits (raw), pretokenized (moses), encoded (spm)
     SUBWORD_MODELS = ["word"]  # unigram, bpe, char, or word
@@ -185,7 +179,7 @@ if __name__ == "__main__":
             # # Preprocess datasets
             # preprocess(toolkit=TOOLKIT, base_path=BASE_PATH, datasets=DATASETS, subword_model=sw_model,
             #            vocab_size=voc_size, force_overwrite=FORCE_OVERWRITE)
-            #
+
             # # Train model
             # train(toolkit=TOOLKIT, base_path=BASE_PATH, datasets=DATASETS, run_name=run_name, subword_model=sw_model,
             #       vocab_size=voc_size, force_overwrite=FORCE_OVERWRITE)
