@@ -33,37 +33,37 @@ def fairseq_model(data_path, run_name, eval_name, src_lang, trg_lang, use_pretok
     fairseq_translate(data_path, run_name, eval_name, src_lang, trg_lang, force_overwrite, beams=[5])
 
 
-def fairseq_preprocess(data_path, src_lang, trg_lang, use_pretokenized, force_overwrite):
+def fairseq_preprocess(data_path, src_lang, trg_lang, subword_model, vocab_size, force_overwrite,
+                       data_bin_path=None):
     # Create path (if needed)
     toolkit_path = os.path.join(data_path, "models", "fairseq")
     path = Path(toolkit_path)
     path.mkdir(parents=True, exist_ok=True)
 
     # Check if data-bin exists
-    data_bin_path = os.path.join(toolkit_path, "data-bin")
+    data_bin_path = os.path.join(toolkit_path, "data-bin", subword_model, str(vocab_size))
     if not force_overwrite and os.path.exists(data_bin_path):
         print("\t=> Skipping preprocessing as it already exists")
     else:
         # Preprocess
-        raw_folder = "splits" if not use_pretokenized else "pretokenized"
-        train_path = os.path.join(data_path, raw_folder, "train")
-        val_path = os.path.join(data_path, raw_folder, "val")
-        test_path = os.path.join(data_path, raw_folder, "test")
+        train_path = os.path.join(data_path, "data", "encoded", subword_model, str(vocab_size), "train")
+        val_path = os.path.join(data_path, "data", "encoded", subword_model, str(vocab_size), "val")
+        test_path = os.path.join(data_path, "data", "encoded", subword_model, str(vocab_size), "test")
 
         # Run command
         preprocess_cmd = f"fairseq-preprocess --source-lang {src_lang} --target-lang {trg_lang} --trainpref {train_path} --validpref {val_path} --testpref {test_path} --destdir {data_bin_path}"
         subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {preprocess_cmd}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
 
 
-def fairseq_train(data_path, run_name, force_overwrite):
+def fairseq_train(data_path, run_name, subword_model, vocab_size, force_overwrite):
     toolkit_path = os.path.join(data_path, "models", "fairseq")
-    data_bin_path = os.path.join(toolkit_path, "data-bin")
+    data_bin_path = os.path.join(toolkit_path, "data-bin", subword_model, str(vocab_size))
     checkpoints_path = os.path.join(toolkit_path, "runs", run_name, "checkpoints")
     logs_path = os.path.join(toolkit_path, "runs", run_name, "logs")
 
     # Check if data-bin exists
     res = "y"
-    if False and not force_overwrite and os.path.exists(checkpoints_path):
+    if not force_overwrite and os.path.exists(checkpoints_path):
         print("There are checkpoints in this experiment.")
         res = input("Do you want to continue [y/N]? ").strip().lower()
 

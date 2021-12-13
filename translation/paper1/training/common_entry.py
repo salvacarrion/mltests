@@ -17,7 +17,7 @@ from translation.paper1.build_datasets.utils import *
 CONDA_ENVNAME = "mltests"
 
 
-def score_test_files(data_path, src_lang, trg_lang, force_overwrite=True, bleu=True, chrf=True, ter=False, bertscore=True, comet=True):
+def score_test_files(data_path, src_lang, trg_lang, force_overwrite=True, bleu=True, chrf=True, ter=False, bertscore=False, comet=False):
     # Create path (if needed)
     score_path = os.path.join(data_path, "scores")
     path = Path(score_path)
@@ -40,7 +40,7 @@ def score_test_files(data_path, src_lang, trg_lang, force_overwrite=True, bleu=T
 
     # BertScore
     if bertscore:
-        bertscore_scores_path = os.path.join(score_path, "bertscores.txt")
+        bertscore_scores_path = os.path.join(score_path, "bert_scores.txt")
         cmd = f"bert-score -r {ref_file_path} -c {hyp_file_path} --lang {trg_lang} > {bertscore_scores_path}"
         subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {cmd}"])
 

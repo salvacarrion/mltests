@@ -17,6 +17,10 @@ Deep learning and stuff
                 - splits/  => train.[es,en], val.[es,en], test.[es,en]
                 - pretokenized/  => moses tokenization
                 - encoded/  => subword model applied (if model_type=words, the "encoded/" won't be the same as the "pretokenized/" unless the min_word_frequency is 1)
+                    - unigram/
+                    - word/
+                        - 1000/
+                        - 8000/  => train.[es,en], val.[es,en], test.[es,en]
             - vocabs/
                 - bpe/
                 - spm/
@@ -31,6 +35,10 @@ Deep learning and stuff
                 - opennmt/
                 - fairseq/
                     - data-bin/
+                        - unigram/
+                        - word/
+                            - 1000/
+                            - 8000/
                     - runs/
                         - mymodel1/
                         - mymodel2/
