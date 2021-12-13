@@ -3,8 +3,8 @@ from pathlib import Path
 import random
 random.seed(123)
 
-from translation.paper1.training import fairseq_entry
-from translation.paper1 import helpers
+from translation.autonmt.training import fairseq_entry
+from translation.autonmt import helpers
 
 CONDA_OPENNMT_ENVNAME = "mltests"
 

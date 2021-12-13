@@ -12,8 +12,8 @@ random.seed(123)
 import unicodedata
 from tqdm import tqdm
 
-from translation.paper1.build_datasets.utils import *
-from translation.paper1 import helpers
+from translation.autonmt.build_datasets.utils import *
+from translation.autonmt import helpers
 
 CONDA_ENVNAME = "fairseq"
 

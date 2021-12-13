@@ -12,7 +12,7 @@ random.seed(123)
 import unicodedata
 from tqdm import tqdm
 
-from translation.paper1.build_datasets.utils import *
+from translation.autonmt.build_datasets.utils import *
 
 CONDA_ENVNAME = "mltests"
 

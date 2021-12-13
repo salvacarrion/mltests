@@ -4,8 +4,8 @@ from itertools import islice
 import random
 random.seed(123)
 
-from translation.paper1.build_datasets.utils import *
-from translation.paper1 import helpers
+from translation.autonmt.build_datasets.utils import *
+from translation.autonmt import helpers
 
 CONDA_ENVNAME = "mltests"
 
