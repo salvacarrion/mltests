@@ -42,7 +42,7 @@
 # #
 # #                 # Extra checks **********
 # #                 # Check level 3: Split folder ******
-# #                 ds_level = os.path.join(ds_name, ds_size_name, lang_pair, "splits")
+# #                 ds_level = os.path.join(ds_name, ds_size_name, lang_pair, "data", "splits")
 # #                 split_path = os.path.join(base_path, ds_level)
 # #                 if os.path.exists(split_path):
 # #                     # Check that all split-files exist
@@ -83,11 +83,11 @@
 # #                 files.append(os.path.join(ds["name"], ds_size_name, lang_pair))
 # #
 # #                 # LEVEL 3: S...lhplit folder ******
-# #                 files.append(os.path.join(ds["name"], ds_size_name, lang_pair, "splits"))
+# #                 files.append(os.path.join(ds["name"], ds_size_name, lang_pair, "data", "splits"))
 # #
 # #                 # LEVEL 3: Files
 # #                 for fname in get_translation_files(src_lang, trg_lang):
-# #                     files.append(os.path.join(ds["name"], ds_size_name, lang_pair, "splits", fname))
+# #                     files.append(os.path.join(ds["name"], ds_size_name, lang_pair, "data", "splits", fname))
 # #     return files
 # #
 # #
