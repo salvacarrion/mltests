@@ -1,6 +1,34 @@
 # mltests
+
 Deep learning and stuff
 
+
+## Installation
+
+**Main environment:**
+
+```
+conda create --name mltests python=3.8
+conda activate mltests
+pip install -r requirements.txt
+```
+
+**Fairseq environment:**
+
+> Note: Fairseq has a lot of incompatibilities and must be run separately
+
+```
+conda create --name fairseq python=3.8
+conda activate fairseq
+pip install -r requirements-fairseq.txt
+```
+
+**Remove environments:**
+
+```
+conda remove --name mltests --all
+conda remove --name fairseq --all
+```
 
 ## Layout for NLP tasks
 

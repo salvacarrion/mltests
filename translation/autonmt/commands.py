@@ -7,7 +7,7 @@ random.seed(123)
 CONDA_ENVNAME = "mltests"
 
 
-def score_test_files(data_path, src_lang, trg_lang, force_overwrite=True, bleu=True, chrf=True, ter=True, bertscore=True, comet=True):
+def score_test_files(data_path, src_lang, trg_lang, force_overwrite=True, bleu=True, chrf=False, ter=False, bertscore=False, comet=False):
     # Create path (if needed)
     score_path = os.path.join(data_path, "scores")
     path = Path(score_path)

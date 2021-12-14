@@ -1,7 +1,12 @@
-fairseq
-tensorboardX
-sacremoses
+# conda create --name fairseq python=3.8
+
+# => Install latest fairseq from Github but fix code
+torch==1.8.*
 sacrebleu==1.4.*
-sentencepiece
-subword-nmt
+tensorboardX==2.4.*
+tensorboard==2.7.*
+#tensorboard
+#sacremoses
+#sentencepiece
+#subword-nmt
 

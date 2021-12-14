@@ -123,15 +123,15 @@ def fairseq_train(data_path, run_name, subword_model, vocab_size, force_overwrit
             f"--save-dir {checkpoints_path}",
             "--no-epoch-checkpoints",
             "--maximize-best-checkpoint-metric",
-            #"--best-checkpoint-metric bleu",
+            "--best-checkpoint-metric bleu",
             ]
 
         # Add evaluation stuff
         train_command += [
             "--eval-bleu",
             "--eval-bleu-args '{\"beam\": 5}'",
-            "--eval-bleu-detok moses",
             "--eval-bleu-print-samples",
+            "--scoring sacrebleu",
         ]
 
         # Logs and stuff
@@ -139,7 +139,7 @@ def fairseq_train(data_path, run_name, subword_model, vocab_size, force_overwrit
             "--log-format simple",
             f"--tensorboard-logdir {logs_path}",
             "--task translation",
-            "--num-workers $(nproc)",
+            # "--num-workers $(nproc)",
         ]
 
         # Run command
@@ -149,9 +149,13 @@ def fairseq_train(data_path, run_name, subword_model, vocab_size, force_overwrit
 
 def fairseq_translate(data_path, checkpoint_path, output_path, src_lang, trg_lang, subword_model, spm_model_path,
                       force_overwrite, beam_width=5, max_length=200):
+    # Check checkpoint path
+    if not os.path.exists(checkpoint_path):
+        raise IOError("The checkpoint does not exists")
+
     # Check if data-bin exists
     res = "y"
-    if False and not force_overwrite and os.path.exists(output_path):
+    if not force_overwrite and os.path.exists(output_path):
         print("There are evaluations in this experiment.")
         res = input("Do you want to continue [y/N]? ").strip().lower()
 
@@ -177,9 +181,8 @@ def fairseq_translate(data_path, checkpoint_path, output_path, src_lang, trg_lan
             f"--max-len-a {0}",  # max_len = ax+b
             f"--max-len-b {max_length}",
             f"--nbest 1",
-            "--skip-invalid-size-inputs-valid-test",
             "--scoring sacrebleu",
-            "--num-workers $(nproc)",
+            "--skip-invalid-size-inputs-valid-test",
         ]
 
         # Run command
