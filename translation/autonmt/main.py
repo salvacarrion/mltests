@@ -62,7 +62,7 @@ def evaluate(toolkit, base_path, train_datasets, eval_datasets, run_name, subwor
                 model_ds_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair)
 
                 # Evaluate model
-                for chkpt_fname in ["checkpoint_best.pt"]:
+                for chkpt_fname in ["checkpoint_last.pt"]:
                     checkpoint_path = os.path.join(model_ds_path, "models", toolkit, "runs", run_name, "checkpoints", chkpt_fname)
                     spm_model_path = os.path.join(model_ds_path, "vocabs", "spm", subword_model, str(vocab_size),  f"spm_{src_lang}-{trg_lang}.model")
                     evaluate_model(toolkit=toolkit, base_path=base_path, model_ds_path=model_ds_path,
@@ -130,10 +130,10 @@ def evaluate_model(toolkit, base_path, model_ds_path, eval_datasets, run_name, c
                         path.mkdir(parents=True, exist_ok=True)
 
                         # Translate
-                        # fairseq_entry.fairseq_translate(data_path=eval_data_bin_path, checkpoint_path=checkpoint_path,
-                        #                                 output_path=beam_output_path, src_lang=src_lang, trg_lang=trg_lang,
-                        #                                 subword_model=subword_model, spm_model_path=spm_model_path,
-                        #                                 force_overwrite=force_overwrite, beam_width=beam_width)
+                        fairseq_entry.fairseq_translate(data_path=eval_data_bin_path, checkpoint_path=checkpoint_path,
+                                                        output_path=beam_output_path, src_lang=src_lang, trg_lang=trg_lang,
+                                                        subword_model=subword_model, spm_model_path=spm_model_path,
+                                                        force_overwrite=force_overwrite, beam_width=beam_width)
 
                         # Score
                         commands.score_test_files(data_path=beam_output_path, src_lang=src_lang, trg_lang=trg_lang, force_overwrite=force_overwrite)
@@ -156,7 +156,7 @@ if __name__ == "__main__":
     TOOLKIT = "fairseq"
     RUN_NAME = "mymodel"
 
-    DATASETS = [
+    TRAIN_DATASETS = [
         {"name": "multi30k", "sizes": [("original", None)], "languages": ["de-en"]},
         # {"name": "ccaligned", "sizes": [("original", None)], "languages": ["ti-en"]},
 
@@ -169,9 +169,11 @@ if __name__ == "__main__":
         # {"name": "scielo/biological", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en", "pt-en"]},
     ]
 
-    EVAL_DATASETS = [
-        {"name": "iwlst16", "sizes": [("original", None)], "languages": ["de-en"]},
-    ]
+    EVAL_DATASETS = TRAIN_DATASETS
+
+    # EVAL_DATASETS = [
+    #     {"name": "multi30k", "sizes": [("original", None)], "languages": ["de-en"]},
+    # ]
 
     for sw_model in SUBWORD_MODELS:
         for voc_size in VOCAB_SIZE:

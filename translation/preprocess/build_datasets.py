@@ -291,17 +291,17 @@ def main(base_path, datasets, encoding_mode, subword_models, vocab_sizes, min_vo
     # Create reduced versions
     create_reduced_versions(base_path, datasets, autofix=True)
 
-    # # Pretokenize (sacremoses)
-    # if encoding_mode == "pretokenized" or "word" in set(subword_models):
-    #     pretokenize(base_path, datasets, force_overwrite=force_overwrite)
+    # Pretokenize (sacremoses)
+    if encoding_mode == "pretokenized" or "word" in set(subword_models):
+        pretokenize(base_path, datasets, force_overwrite=force_overwrite)
 
     # Build vocabs
     for sw_model in subword_models:  # unigram, bpe, char, or word
         for voc_size in vocab_sizes:
-            # # Build vocab
-            # build_vocab(base_path=base_path, datasets=datasets, encoding_mode=encoding_mode,
-            #             subword_model=sw_model, vocab_size=voc_size, character_coverage=1.0, merge_trains=True,
-            #             force_overwrite=force_overwrite)
+            # Build vocab
+            build_vocab(base_path=base_path, datasets=datasets, encoding_mode=encoding_mode,
+                        subword_model=sw_model, vocab_size=voc_size, character_coverage=1.0, merge_trains=True,
+                        force_overwrite=force_overwrite)
 
             # Encode datasets
             if encoding_mode == "encoded":

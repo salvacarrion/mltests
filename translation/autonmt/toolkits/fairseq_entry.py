@@ -186,7 +186,7 @@ def fairseq_translate(data_path, checkpoint_path, output_path, src_lang, trg_lan
         gen_command = " ".join(gen_command)
         subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {gen_command}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
 
-        # Parse output file
+        # Extract sentences from generate-test.txt
         gen_test_path = os.path.join(output_path, "generate-test.txt")
         src_tok_path = os.path.join(output_path, "src.tok")
         ref_tok_path = os.path.join(output_path, "ref.tok")
@@ -195,16 +195,14 @@ def fairseq_translate(data_path, checkpoint_path, output_path, src_lang, trg_lan
         subprocess.call(['/bin/bash', '-i', '-c', f"grep ^T {gen_test_path} | cut -f2- > {ref_tok_path}"])
         subprocess.call(['/bin/bash', '-i', '-c', f"grep ^H {gen_test_path} | cut -f3- > {hyp_tok_path}"])
 
+        # Replace "<<unk>>" with "<unk>" in ref.tok
+        commands.replace_in_file(search_string="<<unk>>", replace_string="<unk>", filename=ref_tok_path)
+
         # Detokenize
         src_txt_path = os.path.join(output_path, "src.txt")
         ref_txt_path = os.path.join(output_path, "ref.txt")
         hyp_txt_path = os.path.join(output_path, "hyp.txt")
-        if subword_model == "word":
-            commands.moses_detokenizer(src_lang, input_file=src_tok_path, output_file=src_txt_path)
-            commands.moses_detokenizer(trg_lang, input_file=ref_tok_path, output_file=ref_txt_path)
-            commands.moses_detokenizer(trg_lang, input_file=hyp_tok_path, output_file=hyp_txt_path)
-        else:
-            commands.spm_decode(spm_model_path, input_file=src_tok_path, output_file=src_txt_path)
-            commands.spm_decode(spm_model_path, input_file=ref_tok_path, output_file=ref_txt_path)
-            commands.spm_decode(spm_model_path, input_file=hyp_tok_path, output_file=hyp_txt_path)
+        commands.spm_decode(spm_model_path, input_file=src_tok_path, output_file=src_txt_path)
+        commands.spm_decode(spm_model_path, input_file=ref_tok_path, output_file=ref_txt_path)
+        commands.spm_decode(spm_model_path, input_file=hyp_tok_path, output_file=hyp_txt_path)
 
