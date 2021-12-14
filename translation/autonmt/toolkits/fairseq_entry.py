@@ -1,37 +1,14 @@
-import datetime
 import os
 import time
 from pathlib import Path
-from itertools import islice
-from shutil import copyfile
 import subprocess
-import re
 import random
+import shutil
 random.seed(123)
 
-import unicodedata
-from tqdm import tqdm
-
-from translation.autonmt.build_datasets.utils import *
-from translation.autonmt import helpers
+from translation.autonmt import commands
 
 CONDA_ENVNAME = "fairseq"
-
-
-def fairseq_model(data_path, run_name, eval_name, src_lang, trg_lang, use_pretokenized, force_overwrite):
-    # Create path (if needed)
-    preprocess_path = os.path.join(data_path, "models", "fairseq")
-    path = Path(preprocess_path)
-    path.mkdir(parents=True, exist_ok=True)
-
-    # Preprocess files
-    fairseq_preprocess(data_path, src_lang, trg_lang, use_pretokenized, force_overwrite)
-
-    # Train model
-    fairseq_train(data_path, run_name, force_overwrite)
-
-    # Evaluate
-    fairseq_translate(data_path, run_name, eval_name, src_lang, trg_lang, force_overwrite, beams=[5])
 
 
 def fairseq_preprocess(ds_path, src_lang, trg_lang, subword_model, vocab_size, force_overwrite):
@@ -45,9 +22,32 @@ def fairseq_preprocess(ds_path, src_lang, trg_lang, subword_model, vocab_size, f
     if not force_overwrite and os.path.exists(data_bin_path):
         print("\t=> Skipping preprocessing as it already exists")
     else:
+        # Delete folder to prevent errors that are hard to debug
+        if force_overwrite and os.path.exists(data_bin_path):
+            print(f"The following directory is going to be delete: {data_bin_path}")
+            res = input(f"Do you want to continue? [y/N]")
+            if res.lower().strip() == 'y':
+                print(f"Deleting directory... ({data_bin_path})")
+                shutil.rmtree(data_bin_path)
+            else:
+                print("Deletion cancelled")
+
+        # Create path (needed only because of the fix separator)
+        path = Path(data_bin_path)
+        path.mkdir(parents=True, exist_ok=True)
+
+        # Copy vocabs and fix separator
+        ori_vocab_path = os.path.join(ds_path, "vocabs", "spm", subword_model, str(vocab_size), f"spm_{src_lang}-{trg_lang}.vocabf")
+        src_vocab_fairseq_path = os.path.join(data_bin_path, f"dict.{src_lang}.txt")
+        trg_vocab_fairseq_path = os.path.join(data_bin_path, f"dict.{trg_lang}.txt")
+        shutil.copyfile(ori_vocab_path, src_vocab_fairseq_path)
+        shutil.copyfile(ori_vocab_path, trg_vocab_fairseq_path)
+        commands.replace_in_file(search_string='\t', replace_string=' ', filename=src_vocab_fairseq_path)
+        commands.replace_in_file(search_string='\t', replace_string=' ', filename=trg_vocab_fairseq_path)
+
         # Preprocess
         data_path = os.path.join(ds_path, "data", "encoded", subword_model, str(vocab_size))
-        fairseq_preprocess_with_vocab(data_path, data_bin_path=data_bin_path, src_lang=src_lang, trg_lang=trg_lang)
+        fairseq_preprocess_with_vocab(data_path, data_bin_path=data_bin_path, src_lang=src_lang, trg_lang=trg_lang, src_vocab_path=src_vocab_fairseq_path, trg_vocab_path=trg_vocab_fairseq_path)
 
 
 def fairseq_preprocess_with_vocab(data_path, data_bin_path, src_lang, trg_lang, src_vocab_path=None, trg_vocab_path=None, train_fname="train", val_fname="val", test_fname="test"):
@@ -58,7 +58,7 @@ def fairseq_preprocess_with_vocab(data_path, data_bin_path, src_lang, trg_lang, 
     subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {cmd}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
 
 
-def fairseq_train(data_path, run_name, subword_model, vocab_size, force_overwrite):
+def fairseq_train(data_path, run_name, subword_model, vocab_size, force_overwrite, model_path=None):
     toolkit_path = os.path.join(data_path, "models", "fairseq")
     data_bin_path = os.path.join(toolkit_path, "data-bin", subword_model, str(vocab_size))
     checkpoints_path = os.path.join(toolkit_path, "runs", run_name, "checkpoints")
@@ -77,6 +77,12 @@ def fairseq_train(data_path, run_name, subword_model, vocab_size, force_overwrit
         wait_seconds = 1
         print(f"[IMPORTANT]: Training overwrite is enabled. (Waiting {wait_seconds} seconds)")
         time.sleep(wait_seconds)
+
+        # Remove last checkpoint
+        last_checkpoint_path = os.path.join(checkpoints_path, "checkpoint_last.pt")
+        if model_path is None and os.path.exists(last_checkpoint_path):
+            print("Removing last checkpoint to train from scratch...")
+            os.remove(last_checkpoint_path)
 
         # Write command
         train_command = [f"fairseq-train {data_bin_path}"]
@@ -97,14 +103,15 @@ def fairseq_train(data_path, run_name, subword_model, vocab_size, force_overwrit
 
         # Add training stuff
         train_command += [
-            "--lr 0.001",
-            "--optimizer adam",
+            "--lr 0.25",
+            "--optimizer nag --clip-norm 0.1",
             "--criterion cross_entropy",
-            "--batch-size 128",
+            "--max-tokens 4096",
+            #"--batch-size 128",
             "--max-epoch 10",
-            "--clip-norm 0.0",
-            "--update-freq 1",
-            "--warmup-updates 4000",
+            # "--clip-norm 0.0",
+            # "--update-freq 1",
+            # "--warmup-updates 4000",
             "--patience 10",
             "--seed 1234",
             #"--max-tokens 4096",
@@ -120,12 +127,12 @@ def fairseq_train(data_path, run_name, subword_model, vocab_size, force_overwrit
             ]
 
         # Add evaluation stuff
-        # train_command += [
-        #     "--eval-bleu",
-        #     "--eval-bleu-args '{\"beam\": 5}'",
-        #     "--eval-bleu-detok moses",
-        #     "--eval-bleu-print-samples",
-        # ]
+        train_command += [
+            "--eval-bleu",
+            "--eval-bleu-args '{\"beam\": 5}'",
+            "--eval-bleu-detok moses",
+            "--eval-bleu-print-samples",
+        ]
 
         # Logs and stuff
         train_command += [
@@ -193,11 +200,11 @@ def fairseq_translate(data_path, checkpoint_path, output_path, src_lang, trg_lan
         ref_txt_path = os.path.join(output_path, "ref.txt")
         hyp_txt_path = os.path.join(output_path, "hyp.txt")
         if subword_model == "word":
-            helpers.moses_detokenizer(src_lang, input_file=src_tok_path, output_file=src_txt_path)
-            helpers.moses_detokenizer(trg_lang, input_file=ref_tok_path, output_file=ref_txt_path)
-            helpers.moses_detokenizer(trg_lang, input_file=hyp_tok_path, output_file=hyp_txt_path)
+            commands.moses_detokenizer(src_lang, input_file=src_tok_path, output_file=src_txt_path)
+            commands.moses_detokenizer(trg_lang, input_file=ref_tok_path, output_file=ref_txt_path)
+            commands.moses_detokenizer(trg_lang, input_file=hyp_tok_path, output_file=hyp_txt_path)
         else:
-            helpers.spm_decode(spm_model_path, input_file=src_tok_path, output_file=src_txt_path)
-            helpers.spm_decode(spm_model_path, input_file=ref_tok_path, output_file=ref_txt_path)
-            helpers.spm_decode(spm_model_path, input_file=hyp_tok_path, output_file=hyp_txt_path)
+            commands.spm_decode(spm_model_path, input_file=src_tok_path, output_file=src_txt_path)
+            commands.spm_decode(spm_model_path, input_file=ref_tok_path, output_file=ref_txt_path)
+            commands.spm_decode(spm_model_path, input_file=hyp_tok_path, output_file=hyp_txt_path)
 

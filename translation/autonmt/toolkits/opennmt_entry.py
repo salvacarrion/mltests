@@ -1,17 +1,8 @@
-import datetime
 import os
 from pathlib import Path
-from itertools import islice
-from shutil import copyfile
 import subprocess
-import re
 import random
 random.seed(123)
-
-import unicodedata
-from tqdm import tqdm
-
-from translation.autonmt.build_datasets.utils import *
 
 CONDA_ENVNAME = "mltests"
 

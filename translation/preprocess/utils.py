@@ -1,5 +1,7 @@
 import re
 import random
+from collections import defaultdict
+
 random.seed(123)
 
 import unicodedata
@@ -57,3 +59,12 @@ def preprocess_pairs(src_lines, trg_lines, shuffle):
 
     return lines
 
+
+def get_frequencies(filename):
+    vocab_frequencies = defaultdict(int)
+    with open(filename, 'r') as f:
+        for line in tqdm(f):
+            tokens = line.strip().split(' ')
+            for tok in tokens:
+                vocab_frequencies[tok] += 1
+    return vocab_frequencies

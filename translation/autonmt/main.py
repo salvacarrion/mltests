@@ -3,8 +3,8 @@ from pathlib import Path
 import random
 random.seed(123)
 
-from translation.autonmt.training import fairseq_entry
-from translation.autonmt import helpers
+from translation.autonmt.toolkits import fairseq_entry
+from translation.autonmt import commands
 
 CONDA_OPENNMT_ENVNAME = "mltests"
 
@@ -102,11 +102,11 @@ def evaluate_model(toolkit, base_path, model_ds_path, eval_datasets, run_name, c
 
                     # Check if the file exists
                     if not force_overwrite and os.path.exists(new_filename):
-                        print("\t\t- Skipping eval file encoding as it already exists")
+                        print("=> Skipping eval file encoding as it already exists")
                     else:
                         # Encode files
-                        print(f"\t\t=> Encoding test file: {ori_filename}")
-                        helpers.spm_encode(spm_model_path=spm_model_path, input_file=ori_filename, output_file=new_filename)
+                        print(f"=> Encoding test file: {ori_filename}")
+                        commands.spm_encode(spm_model_path=spm_model_path, input_file=ori_filename, output_file=new_filename)
 
                 # Select toolkit
                 if toolkit == "fairseq":
@@ -123,35 +123,36 @@ def evaluate_model(toolkit, base_path, model_ds_path, eval_datasets, run_name, c
                     # Process raw evaluation files
                     fairseq_entry.fairseq_preprocess_with_vocab(data_path=eval_data_path, data_bin_path=eval_data_bin_path, src_lang=src_lang, trg_lang=trg_lang, src_vocab_path=src_vocab_path, trg_vocab_path=trg_vocab_path, train_fname="test", val_fname=None)
 
-                    for beam in beams:
+                    for beam_width in beams:
                         # Create outpath (if needed)
-                        beam_output_path = os.path.join(eval_path, "beams", f"beam_{beam}")
+                        beam_output_path = os.path.join(eval_path, "beams", f"beam_{beam_width}")
                         path = Path(beam_output_path)
                         path.mkdir(parents=True, exist_ok=True)
 
                         # Translate
-                        fairseq_entry.fairseq_translate(data_path=eval_data_bin_path, checkpoint_path=checkpoint_path,
-                                                        output_path=beam_output_path, src_lang=src_lang, trg_lang=trg_lang,
-                                                        subword_model=subword_model, spm_model_path=spm_model_path,
-                                                        force_overwrite=force_overwrite, beam_width=beam)
+                        # fairseq_entry.fairseq_translate(data_path=eval_data_bin_path, checkpoint_path=checkpoint_path,
+                        #                                 output_path=beam_output_path, src_lang=src_lang, trg_lang=trg_lang,
+                        #                                 subword_model=subword_model, spm_model_path=spm_model_path,
+                        #                                 force_overwrite=force_overwrite, beam_width=beam_width)
 
                         # Score
-                        helpers.score_test_files(data_path=beam_output_path, src_lang=src_lang, trg_lang=trg_lang, force_overwrite=force_overwrite)
+                        commands.score_test_files(data_path=beam_output_path, src_lang=src_lang, trg_lang=trg_lang, force_overwrite=force_overwrite)
                 else:
                     raise NotImplementedError(f"Unknown toolkit: {toolkit}")
 
 
 if __name__ == "__main__":
-    # Download datasets: https://opus.nlpl.eu/
-
-    BASE_PATH = "/home/scarrion/datasets/nn/translation"
-    # BASE_PATH = "/home/salva/Documents/datasets/nn/translation"
+    # Get base path
+    if os.environ.get("LOCAL_GPU"):
+        BASE_PATH = "/home/salva/Documents/datasets/nn/translation"
+    else:
+        BASE_PATH = "/home/scarrion/datasets/nn/translation"
 
     ENCODING_MODE = "pretokenized"  # splits (raw), pretokenized (moses), encoded (spm)
     SUBWORD_MODELS = ["word"]  # unigram, bpe, char, or word
     VOCAB_SIZE = [16000]
     BEAMS = [5]
-    FORCE_OVERWRITE = True
+    FORCE_OVERWRITE = False
     TOOLKIT = "fairseq"
     RUN_NAME = "mymodel"
 
@@ -176,16 +177,16 @@ if __name__ == "__main__":
         for voc_size in VOCAB_SIZE:
             run_name = f"{RUN_NAME}_{sw_model}_{voc_size}"
 
-            # # Preprocess datasets
-            # preprocess(toolkit=TOOLKIT, base_path=BASE_PATH, datasets=DATASETS, subword_model=sw_model,
-            #            vocab_size=voc_size, force_overwrite=FORCE_OVERWRITE)
+            # Preprocess datasets
+            preprocess(toolkit=TOOLKIT, base_path=BASE_PATH, datasets=DATASETS, subword_model=sw_model,
+                       vocab_size=voc_size, force_overwrite=FORCE_OVERWRITE)
 
-            # # Train model
-            # train(toolkit=TOOLKIT, base_path=BASE_PATH, datasets=DATASETS, run_name=run_name, subword_model=sw_model,
-            #       vocab_size=voc_size, force_overwrite=FORCE_OVERWRITE)
+            # Train model
+            train(toolkit=TOOLKIT, base_path=BASE_PATH, datasets=DATASETS, run_name=run_name, subword_model=sw_model,
+                  vocab_size=voc_size, force_overwrite=True)
 
             # Evaluate models
             evaluate(toolkit=TOOLKIT, base_path=BASE_PATH, train_datasets=DATASETS, eval_datasets=EVAL_DATASETS,
                      run_name=run_name, subword_model=sw_model, vocab_size=voc_size, beams=BEAMS,
-                     force_overwrite=FORCE_OVERWRITE)
+                     force_overwrite=True)
     print("Done!")

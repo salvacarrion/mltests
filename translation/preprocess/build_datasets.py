@@ -1,11 +1,12 @@
 import os
 from pathlib import Path
 from itertools import islice
+from collections import defaultdict
 import random
 random.seed(123)
 
-from translation.autonmt.build_datasets.utils import *
-from translation.autonmt import helpers
+from translation.preprocess.utils import *
+from translation.autonmt import commands
 
 CONDA_ENVNAME = "mltests"
 
@@ -151,7 +152,7 @@ def pretokenize(base_path, datasets, force_overwrite):
                         print("\t\t=> Skipping pretokenization as this file already exists")
                     else:
                         # Tokenize (sacremoses): https://github.com/alvations/sacremoses
-                        helpers.moses_tokenizer(lang=file_lang, input_file=ori_filename, output_file=new_filename)
+                        commands.moses_tokenizer(lang=file_lang, input_file=ori_filename, output_file=new_filename)
 
 
 def build_vocab(base_path, datasets, encoding_mode, subword_model, vocab_size, character_coverage, merge_trains, force_overwrite):
@@ -199,10 +200,10 @@ def build_vocab(base_path, datasets, encoding_mode, subword_model, vocab_size, c
                 if not force_overwrite and os.path.exists(model_prefix):
                     print("\t\t=> Skipping spm training as it already exists")
                 else:
-                    helpers.spm_train(input_file=new_filename, model_prefix=model_prefix, vocab_size=vocab_size, character_coverage=character_coverage, subword_model=subword_model)
+                    commands.spm_train(input_file=new_filename, model_prefix=model_prefix, vocab_size=vocab_size, character_coverage=character_coverage, subword_model=subword_model)
 
 
-def encode_datasets(base_path, datasets, encoding_mode, subword_model, vocab_size, min_vocab_frequency, force_overwrite):
+def encode_datasets(base_path, datasets, encoding_mode, subword_model, vocab_size, min_vocab_frequency, export_frequencies, force_overwrite):
     print(f"- Encoding datasets: (encoding_mode={encoding_mode}; min_vocab_frequency={min_vocab_frequency})")
 
     # Sentenpiece restrictions (I don't know why)
@@ -218,9 +219,9 @@ def encode_datasets(base_path, datasets, encoding_mode, subword_model, vocab_siz
                 src_lang, trg_lang = lang_pair.split("-")
                 trans_files = get_translation_files(src_lang, trg_lang)
 
-                # spm mode path
-                vocab_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "vocabs", "spm")
-                spm_model_path = os.path.join(vocab_path, subword_model, str(vocab_size), f"spm_{src_lang}-{trg_lang}.model")
+                # Get vocab dir
+                vocab_dir = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "vocabs", "spm", subword_model, str(vocab_size))
+                spm_model_path = os.path.join(vocab_dir, f"spm_{src_lang}-{trg_lang}.model")
 
                 # Create encoded path
                 encoded_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data", "encoded")
@@ -228,24 +229,55 @@ def encode_datasets(base_path, datasets, encoding_mode, subword_model, vocab_siz
                 path.mkdir(parents=True, exist_ok=True)
 
                 # Encode files
+                new_filename_dir = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data", "encoded", subword_model, str(vocab_size))
+                raw_folder = "pretokenized" if (encoding_mode == "pretokenized" or subword_model == "word") else "splits"
                 for fname in trans_files:
-                    raw_folder = "pretokenized" if (encoding_mode == "pretokenized" or subword_model == "word") else "splits"
                     ori_filename = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data", raw_folder, fname)
-                    new_filename_dir = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data", "encoded", subword_model, str(vocab_size))
                     new_filename = os.path.join(new_filename_dir, fname)
 
                     # Create new path
                     path = Path(new_filename_dir)
                     path.mkdir(parents=True, exist_ok=True)
 
-                    # Encode files
-                    if not force_overwrite and os.path.exists(new_filename):
-                        print(f"\t\t=> Skipping encoded file as it already exists: ({fname})")
-                    else:
-                        helpers.spm_encode(spm_model_path=spm_model_path, input_file=ori_filename, output_file=new_filename)
+                    # # Encode files
+                    # if not force_overwrite and os.path.exists(new_filename):
+                    #     print(f"\t\t=> Skipping encoded file as it already exists: ({fname})")
+                    # else:
+                    #     commands.spm_encode(spm_model_path=spm_model_path, input_file=ori_filename, output_file=new_filename)
+
+                # Export vocab frequencies
+                if export_frequencies:
+                    export_vocab_frequencies(encoded_dir=new_filename_dir, vocab_dir=vocab_dir, src_lang=src_lang, trg_lang=trg_lang, force_overwrite=force_overwrite)
 
 
-def main(base_path, datasets, encoding_mode, subword_models, vocab_sizes, min_vocab_frequency, force_overwrite):
+def export_vocab_frequencies(encoded_dir, vocab_dir, src_lang, trg_lang, force_overwrite):
+    vocab_path = os.path.join(vocab_dir, f"spm_{src_lang}-{trg_lang}.vocab")
+    vocab_freq_path = os.path.join(vocab_dir, f"spm_{src_lang}-{trg_lang}.vocabf")
+
+    if not force_overwrite and os.path.exists(vocab_freq_path):
+        print(f"\t\t=> Skipping exporting vocab frequencies as the file already exists: ({vocab_freq_path})")
+    else:
+        print(f"Exporting vocab frequencies...")
+        # Load vocab
+        vocabs = {l.strip().split('\t')[0] for l in open(vocab_path, 'r').readlines()}
+
+        # Count tokens
+        vocab_frequencies = defaultdict(int)
+        for fname in [f"train.{src_lang}", f"train.{trg_lang}"]:
+            with open(os.path.join(encoded_dir, fname), 'r') as f:
+                for line in tqdm(f):
+                    tokens = line.strip().split(' ')
+                    for tok in tokens:
+                        if tok in vocabs:  # Count only the tokens that exists in the vocab
+                            vocab_frequencies[tok] += 1
+
+        # Save file
+        vocab_frequencies = sorted(list(vocab_frequencies.items()), key=lambda x: x[1], reverse=True)  # Descending order
+        with open(vocab_freq_path, 'w') as f:
+            f.writelines([f"{pair[0]}\t{pair[1]}\n" for pair in vocab_frequencies])
+
+
+def main(base_path, datasets, encoding_mode, subword_models, vocab_sizes, min_vocab_frequency, force_overwrite, split_raw_data=False):
     # Checks
     if encoding_mode not in {"pretokenized", "encoded", "splits"}:
         raise ValueError(f"'encoded_mode' not valid.")
@@ -253,45 +285,47 @@ def main(base_path, datasets, encoding_mode, subword_models, vocab_sizes, min_vo
         raise ValueError(f"'encoded_mode' not valid.")
 
     # Split raw data
-    create_splits(base_path, datasets, val_size=5000, test_size=5000, shuffle=True, force_overwrite=force_overwrite)
+    if split_raw_data:
+        create_splits(base_path, datasets, val_size=5000, test_size=5000, shuffle=True, force_overwrite=force_overwrite)
 
     # Create reduced versions
     create_reduced_versions(base_path, datasets, autofix=True)
 
-    # Pretokenize (sacremoses)
-    if encoding_mode == "pretokenized" or "word" in set(subword_models):
-        pretokenize(base_path, datasets, force_overwrite=force_overwrite)
+    # # Pretokenize (sacremoses)
+    # if encoding_mode == "pretokenized" or "word" in set(subword_models):
+    #     pretokenize(base_path, datasets, force_overwrite=force_overwrite)
 
     # Build vocabs
     for sw_model in subword_models:  # unigram, bpe, char, or word
         for voc_size in vocab_sizes:
-            # Build vocab
-            build_vocab(base_path=base_path, datasets=datasets, encoding_mode=encoding_mode,
-                        subword_model=sw_model, vocab_size=voc_size, character_coverage=1.0, merge_trains=True,
-                        force_overwrite=force_overwrite)
+            # # Build vocab
+            # build_vocab(base_path=base_path, datasets=datasets, encoding_mode=encoding_mode,
+            #             subword_model=sw_model, vocab_size=voc_size, character_coverage=1.0, merge_trains=True,
+            #             force_overwrite=force_overwrite)
 
             # Encode datasets
             if encoding_mode == "encoded":
                 encode_datasets(base_path=base_path, datasets=datasets, encoding_mode=encoding_mode,
                                 subword_model=sw_model, vocab_size=voc_size, min_vocab_frequency=min_vocab_frequency,
-                                force_overwrite=force_overwrite)
+                                export_frequencies=True, force_overwrite=force_overwrite)
 
 
 if __name__ == "__main__":
-    # Download datasets: https://opus.nlpl.eu/
-
-    BASE_PATH = "/home/scarrion/datasets/nn/translation"
-    # BASE_PATH = "/home/salva/Documents/datasets/nn/translation"
+    # Get base path
+    if os.environ.get("LOCAL_GPU"):
+        BASE_PATH = "/home/salva/Documents/datasets/nn/translation"
+    else:
+        BASE_PATH = "/home/scarrion/datasets/nn/translation"
 
     ENCODING_MODE = "encoded"  # splits (raw), encoded (spm), [pretokenized (moses) => Force moses tokenization for everything]
-    SUBWORD_MODELS = ["char", "word", "unigram"]  # unigram, bpe, char, or word
+    SUBWORD_MODELS = ["word", "char", "unigram"]  # unigram, bpe, char, or word
     VOCAB_SIZE = [16000]
     MIN_VOCAB_FREQUENCY = 1  # Doesn't work
-    FORCE_OVERWRITE = False
+    FORCE_OVERWRITE = True
 
     DATASETS = [
         {"name": "multi30k", "sizes": [("original", None)], "languages": ["de-en"]},
-        {"name": "europarl", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en"]},
+        # {"name": "europarl", "sizes": [("50k", 50000)], "languages": ["es-en"]},
 
         # {"name": "ccaligned", "sizes": [("original", None)], "languages": ["or-en", "ti-en"]},
         # {"name": "wikimatrix", "sizes": [("original", None)], "languages": ["ar-en", "ja-en", "ko-en"]},
@@ -309,3 +343,4 @@ if __name__ == "__main__":
          vocab_sizes=VOCAB_SIZE, min_vocab_frequency=MIN_VOCAB_FREQUENCY, force_overwrite=FORCE_OVERWRITE)
 
     print("Done!")
+
