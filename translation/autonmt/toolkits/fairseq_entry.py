@@ -58,7 +58,7 @@ def fairseq_preprocess_with_vocab(data_path, data_bin_path, src_lang, trg_lang, 
     subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {cmd}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
 
 
-def fairseq_train(data_path, run_name, subword_model, vocab_size, force_overwrite, model_path=None):
+def fairseq_train(data_path, run_name, subword_model, vocab_size, force_overwrite, model_path=None, num_gpus=None):
     toolkit_path = os.path.join(data_path, "models", "fairseq")
     data_bin_path = os.path.join(toolkit_path, "data-bin", subword_model, str(vocab_size))
     checkpoints_path = os.path.join(toolkit_path, "runs", run_name, "checkpoints")
@@ -103,18 +103,17 @@ def fairseq_train(data_path, run_name, subword_model, vocab_size, force_overwrit
 
         # Add training stuff
         train_command += [
-            "--lr 0.25",
-            "--optimizer nag --clip-norm 0.1",
+            "--lr 0.001",
+            "--optimizer adam",
             "--criterion cross_entropy",
             "--max-tokens 4096",
-            #"--batch-size 128",
+            # "--batch-size 128",
             "--max-epoch 10",
-            # "--clip-norm 0.0",
-            # "--update-freq 1",
-            # "--warmup-updates 4000",
+            "--clip-norm 1.0",
+            "--update-freq 1",
             "--patience 10",
             "--seed 1234",
-            #"--max-tokens 4096",
+            # "--warmup-updates 4000",
             #"--lr-scheduler reduce_lr_on_plateau",
            ]
 
@@ -144,7 +143,8 @@ def fairseq_train(data_path, run_name, subword_model, vocab_size, force_overwrit
 
         # Run command
         train_command = " ".join(train_command)
-        subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {train_command}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
+        num_gpus = f"CUDA_VISIBLE_DEVICES={','.join([str(i) for i in range(num_gpus)])}" if num_gpus else None
+        subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {num_gpus} {train_command}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
 
 
 def fairseq_translate(data_path, checkpoint_path, output_path, src_lang, trg_lang, subword_model, spm_model_path,

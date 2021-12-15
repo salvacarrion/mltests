@@ -28,7 +28,7 @@ def preprocess(toolkit, base_path, datasets, subword_model, vocab_size, force_ov
                     raise NotImplementedError(f"Unknown toolkit: {toolkit}")
 
 
-def train(toolkit, base_path, datasets, run_name, subword_model, vocab_size, force_overwrite):
+def train(toolkit, base_path, datasets, run_name, subword_model, vocab_size, force_overwrite, num_gpus=1):
     # Run name
     print(f"- Train & Score: (run_name={run_name}, subword_model={subword_model}; vocab_size={vocab_size})")
 
@@ -43,7 +43,8 @@ def train(toolkit, base_path, datasets, run_name, subword_model, vocab_size, for
 
                 # Select toolkit
                 if toolkit == "fairseq":
-                    fairseq_entry.fairseq_train(ds_path, run_name, subword_model, vocab_size, force_overwrite)
+                    fairseq_entry.fairseq_train(data_path=ds_path, run_name=run_name, subword_model=subword_model,
+                                                vocab_size=vocab_size, force_overwrite=force_overwrite, num_gpus=num_gpus)
                 else:
                     raise NotImplementedError(f"Unknown toolkit: {toolkit}")
 
