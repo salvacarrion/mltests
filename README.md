@@ -30,6 +30,19 @@ conda remove --name mltests --all
 conda remove --name fairseq --all
 ```
 
+## Fix problems on ssh
+
+```
+Git conflict:
+Please move or remove them before you merge.
+Aborting
+
+Fix:
+git clean -d -f
+git reset --hard
+git pull
+```
+
 ## Layout for NLP tasks
 
 
