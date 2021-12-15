@@ -27,10 +27,12 @@ bert-score==0.3.*
 unbabel-comet==1.0.*
 sacrebleu==2.0.*
 
-# NLP: Tokenizers
+# NLP
 sacremoses==0.0.*
 sentencepiece==0.1.*
 subword-nmt==0.3.*
+torchtext==0.11.*
+spacy==3.2.*
 
 # ONNX
 tf2onnx==1.9.*
@@ -38,3 +40,4 @@ onnx==1.10.*
 
 # Other
 tqdm==4.62.*
+jupyterlab==3.2.*

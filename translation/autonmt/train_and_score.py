@@ -152,8 +152,8 @@ if __name__ == "__main__":
     ENCODING_MODE = "pretokenized"  # splits (raw), pretokenized (moses), encoded (spm)
     SUBWORD_MODELS = ["word"]  # unigram, bpe, char, or word
     VOCAB_SIZE = [16000]
-    BEAMS = [5]
-    NUM_GPUS = None  # None=all, 2=[0,1]
+    BEAMS = [1, 5]
+    NUM_GPUS = None  # None=default; 1=[0]; 2=[0,1];...
     FORCE_OVERWRITE = True
     TOOLKIT = "fairseq"
     RUN_NAME = "mymodel"
