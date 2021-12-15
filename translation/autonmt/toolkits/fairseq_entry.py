@@ -103,7 +103,7 @@ def fairseq_train(data_path, run_name, subword_model, vocab_size, force_overwrit
 
         # Add training stuff
         train_command += [
-            "--lr 0.001",
+            "--lr 0.0005",
             "--optimizer adam",
             "--criterion cross_entropy",
             "--max-tokens 4096",
