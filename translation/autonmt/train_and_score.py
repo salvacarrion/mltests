@@ -28,7 +28,7 @@ def preprocess(toolkit, base_path, datasets, subword_model, vocab_size, force_ov
                     raise NotImplementedError(f"Unknown toolkit: {toolkit}")
 
 
-def train(toolkit, base_path, datasets, run_name, subword_model, vocab_size, force_overwrite, num_gpus=1):
+def train(toolkit, base_path, datasets, run_name, subword_model, vocab_size, force_overwrite, num_gpus):
     # Run name
     print(f"- Train & Score: (run_name={run_name}, subword_model={subword_model}; vocab_size={vocab_size})")
 
@@ -153,6 +153,7 @@ if __name__ == "__main__":
     SUBWORD_MODELS = ["word"]  # unigram, bpe, char, or word
     VOCAB_SIZE = [16000]
     BEAMS = [5]
+    NUM_GPUS = None  # None=all, 2=[0,1]
     FORCE_OVERWRITE = True
     TOOLKIT = "fairseq"
     RUN_NAME = "mymodel"
@@ -186,7 +187,7 @@ if __name__ == "__main__":
 
             # Train model
             train(toolkit=TOOLKIT, base_path=BASE_PATH, datasets=TRAIN_DATASETS, run_name=run_name, subword_model=sw_model,
-                  vocab_size=voc_size, force_overwrite=True)
+                  vocab_size=voc_size, force_overwrite=True, num_gpus=NUM_GPUS)
 
             # Evaluate models
             evaluate(toolkit=TOOLKIT, base_path=BASE_PATH, train_datasets=TRAIN_DATASETS, eval_datasets=EVAL_DATASETS,
