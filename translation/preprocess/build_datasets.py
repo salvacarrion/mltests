@@ -239,11 +239,11 @@ def encode_datasets(base_path, datasets, encoding_mode, subword_model, vocab_siz
                     path = Path(new_filename_dir)
                     path.mkdir(parents=True, exist_ok=True)
 
-                    # # Encode files
-                    # if not force_overwrite and os.path.exists(new_filename):
-                    #     print(f"\t\t=> Skipping encoded file as it already exists: ({fname})")
-                    # else:
-                    #     commands.spm_encode(spm_model_path=spm_model_path, input_file=ori_filename, output_file=new_filename)
+                    # Encode files
+                    if not force_overwrite and os.path.exists(new_filename):
+                        print(f"\t\t=> Skipping encoded file as it already exists: ({fname})")
+                    else:
+                        commands.spm_encode(spm_model_path=spm_model_path, input_file=ori_filename, output_file=new_filename)
 
                 # Export vocab frequencies
                 if export_frequencies:
