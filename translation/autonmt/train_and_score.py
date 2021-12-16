@@ -203,7 +203,7 @@ def main():
     BEAMS = [1, 5]
     NUM_GPUS = None  # None=default; 1=[0]; 2=[0,1];...
     FORCE_OVERWRITE = False
-    INTERACTIVE = True
+    INTERACTIVE = False
     TOOLKIT = "fairseq"
     RUN_NAME = "mymodel"
     METRICS = {"bleu", "chrf", "ter", "bertscore", "comet"}
@@ -241,14 +241,16 @@ def main():
             # Summary
             logging.info(f"***** Starting new run *****")
             logging.info(f"- Summary for ({str(run_name)}):")
-            logging.info(f"\t- Subword model: {str(sw_model)}")
-            logging.info(f"\t- Vocabulary size: {str(voc_size)}")
+            logging.info(f"\t- Run name: {str(run_name)}")
+            logging.info(f"\t- Run start time: {str(datetime.datetime.now())}")
+            logging.info(f"\t- Toolkit: {str(TOOLKIT)}")
+            logging.info(f"\t- Metrics: {str(METRICS)}")
             logging.info(f"\t- Num. GPUs: {str(NUM_GPUS)}")
             logging.info(f"\t- Force overwrite: {str(FORCE_OVERWRITE)}")
             logging.info(f"\t- Interactive: {str(INTERACTIVE)}")
-            logging.info(f"\t- Toolkit: {str(TOOLKIT)}")
-            logging.info(f"\t- Run name: {str(run_name)}")
-            logging.info(f"\t- metrics: {str(METRICS)}")
+            logging.info(f"\t- Subword model: {str(sw_model)}")
+            logging.info(f"\t- Vocabulary size: {str(voc_size)}")
+            logging.info(f"\t- Run number: {str(runs_counter)}")
 
             # Add to row
             row["run_name"] = str(run_name)
@@ -260,6 +262,7 @@ def main():
             row["interactive"] = str(INTERACTIVE)
             row["subword_model"] = str(sw_model)
             row["vocab_size"] = str(voc_size)
+            row["run_number"] = str(runs_counter)
 
             # Preprocessing
             kwargs = {'toolkit': TOOLKIT, 'base_path': BASE_PATH, 'datasets': TRAIN_DATASETS, 'subword_model': sw_model,
@@ -290,13 +293,13 @@ def main():
                 path.mkdir(parents=True, exist_ok=True)
 
                 # Save json
-                utils.save_json(row, os.path.join(path, f"{str(runs_counter)}__{run_name}__{str(datetime.datetime.now())}.json"))
+                utils.save_json(row, os.path.join(path, f"{str(runs_counter)}__{run_name}.json"))
             except Exception as e:
                 logging.error(e)
 
     # Save pandas with results
     df = pd.DataFrame(rows)
-    df.to_csv(os.path.join(LOGS_PATH, "runs", f"runs_summary__{str(datetime.datetime.now())}.csv"), index=False)
+    df.to_csv(os.path.join(LOGS_PATH, f"runs_summary.csv"), index=False)
 
     logging.info(f"- Total runs: {runs_counter}")
     logging.info(f"########## DONE! ##########")
