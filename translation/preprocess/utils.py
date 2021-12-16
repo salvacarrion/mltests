@@ -1,4 +1,5 @@
 import re
+import json
 import random
 from collections import defaultdict
 
@@ -70,6 +71,12 @@ def get_frequencies(filename):
     return vocab_frequencies
 
 
+def get_tokens_by_sentence(filename):
+    with open(filename, 'r') as f:
+        token_sizes = [len(line.strip().split(' ')) for line in f.readlines()]
+    return token_sizes
+
+
 def human_format(num, decimals=2):
     if num < 10000:
         return str(num)
@@ -82,3 +89,8 @@ def human_format(num, decimals=2):
             num /= 1000.0
 
         return template % (num, ['', 'K', 'M', 'G', 'T', 'P'][magnitude])
+
+
+def save_json(d, savepath):
+    with open(savepath, 'w') as f:
+        json.dump(d, f)

@@ -291,7 +291,15 @@ def plot_datasets(base_path, datasets, subword_model, vocab_size, force_overwrit
 
     SAVE_FIGURES=True
     SHOW_FIGURES=False
+    ADD_DATASET_TITLE=True
 
+    # Set backend
+    if SAVE_FIGURES:
+        plots.set_non_gui_backend()
+        if SHOW_FIGURES:
+            raise ValueError("'save_fig' is incompatible with 'show_fig'")
+
+    # Walk through datasets
     for ds in datasets:  # Dataset
         ds_name = ds["name"]
         for ds_size_name, ds_max_lines in ds["sizes"]:  # Lengths
@@ -300,6 +308,7 @@ def plot_datasets(base_path, datasets, subword_model, vocab_size, force_overwrit
                 trans_files = utils.get_translation_files(src_lang, trg_lang)
 
                 # Set base path
+                alias_name = f"{ds_name.title()} ({lang_pair}; {subword_model}; {str(vocab_size)})"
                 base_fname = f"{ds_name}_{ds_size_name}_{lang_pair}__{subword_model}_{str(vocab_size)}"
                 print(f"\t=> Creating plots for: {base_fname}")
 
@@ -308,9 +317,8 @@ def plot_datasets(base_path, datasets, subword_model, vocab_size, force_overwrit
                 encoded_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data", "encoded", subword_model, str(vocab_size))
 
                 # Create plot paths
-                plots_vocabs_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "plots", "vocabs", subword_model, str(vocab_size))
                 plots_encoded_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "plots", "data", "encoded", subword_model, str(vocab_size))
-                for p in [plots_vocabs_path, plots_encoded_path]:
+                for p in [plots_encoded_path]:
                     path = Path(p)
                     path.mkdir(parents=True, exist_ok=True)
 
@@ -318,8 +326,9 @@ def plot_datasets(base_path, datasets, subword_model, vocab_size, force_overwrit
                 split_stats = {}
                 for fname in trans_files:
                     split_name, split_lang = fname.split('.')
-                    tokens_by_sentence = np.array(plots.get_tokens_by_sentence(filename=os.path.join(encoded_path, fname)))
+                    tokens_by_sentence = np.array(utils.get_tokens_by_sentence(filename=os.path.join(encoded_path, fname)))
 
+                    # Compute data
                     row = {
                         "total_sentences": len(tokens_by_sentence),
                         "total_tokens": int(tokens_by_sentence.sum()),
@@ -330,41 +339,46 @@ def plot_datasets(base_path, datasets, subword_model, vocab_size, force_overwrit
                         "percentile5_tokens": int(np.percentile(tokens_by_sentence, 5)),
                         "percentile50_tokens": int(np.percentile(tokens_by_sentence, 50)),
                         "percentile95_tokens": int(np.percentile(tokens_by_sentence, 95)),
-                        "split": split_name.title(),
+                        "split": split_name,
                         "lang": split_lang,
-                        "alias": f"{split_name.title()} ({split_lang})",
                     }
                     split_stats[fname] = row
 
                     # Plot sentence length distribution (by tokens' length): 3x2
                     df = pd.DataFrame(tokens_by_sentence, columns=["frequency"])
                     title = f"Sentence length distribution"
+                    title = title if not ADD_DATASET_TITLE else f"{alias_name}: {title}"
                     p_fname = f"sent_distr_{split_name}_{split_lang}__{base_fname}"
                     plots.histogram(data=df, x="frequency", output_dir=plots_encoded_path, fname=p_fname,
                                     title=title, xlabel="Tokens per sentence", ylabel="Frequency", bins=100,
-                                    aspect_ratio=(6, 4), size=1.5, save_fig=SAVE_FIGURES, show_fig=SHOW_FIGURES)
+                                    aspect_ratio=(6, 4), size=1.5, save_fig=SAVE_FIGURES, show_fig=SHOW_FIGURES,
+                                    overwrite=force_overwrite)
 
-                # Save statistical data
-                with open(os.path.join(plots_encoded_path, f"stats__{base_fname}.json"), 'w') as f:
-                    json.dump(split_stats, f)
-
-                # Get data
+                # Create dataframe
                 df = pd.DataFrame(list(split_stats.values()))
+
+                # Save data
+                utils.save_json(split_stats, savepath=os.path.join(plots_encoded_path, f"stats__{base_fname}.json"))
+                # df.to_csv(os.path.join(plots_encoded_path, f"stats__{base_fname}.csv"), index=False)
 
                 # Plot split size (by its sentence number): 1
                 print(f"\t\t=> Creating 'Split sizes' plots...")
                 title = f"Split sizes (by sentences)"
+                title = title if not ADD_DATASET_TITLE else f"{alias_name}: {title}"
                 p_fname = f"split_size_sent__{base_fname}"
                 plots.catplot(data=df, x="split", y="total_sentences",  hue="lang",
                               title=title, xlabel="Dataset partitions", ylabel="Num. of sentences", leyend_title=None,
-                              output_dir=plots_encoded_path, fname=p_fname,  aspect_ratio=(8, 4), size=1.0, save_fig=SAVE_FIGURES, show_fig=SHOW_FIGURES)
+                              output_dir=plots_encoded_path, fname=p_fname,  aspect_ratio=(8, 4), size=1.0,
+                              save_fig=SAVE_FIGURES, show_fig=SHOW_FIGURES, overwrite=force_overwrite)
 
                 # Plot split size (by token number): 1
                 title = f"Split sizes (by tokens)"
+                title = title if not ADD_DATASET_TITLE else f"{alias_name}: {title}"
                 p_fname = f"split_size_tok__{base_fname}"
                 plots.catplot(data=df, x="split", y="total_tokens",  hue="lang",
                               title=title, xlabel="Dataset partitions", ylabel="Num. of tokens", leyend_title=None,
-                              output_dir=plots_encoded_path, fname=p_fname,  aspect_ratio=(8, 4), size=1.0, save_fig=SAVE_FIGURES, show_fig=SHOW_FIGURES)
+                              output_dir=plots_encoded_path, fname=p_fname,  aspect_ratio=(8, 4), size=1.0,
+                              save_fig=SAVE_FIGURES, show_fig=SHOW_FIGURES, overwrite=force_overwrite)
 
                 # Plot vocabulary frequency: 1
                 print(f"\t\t=> Creating 'Vocabulary distribution' plots...")
@@ -379,11 +393,13 @@ def plot_datasets(base_path, datasets, subword_model, vocab_size, force_overwrit
 
                 for top_k in [100, 150]:
                     title = f"Vocabulary distribution (top {str(top_k)})"
+                    title = title if not ADD_DATASET_TITLE else f"{alias_name}: {title}"
                     p_fname = f"vocab_distr_top{str(top_k)}__{base_fname}"
                     plots.barplot(data=df.head(top_k), x="token", y="frequency",
-                                  output_dir=plots_vocabs_path, fname=p_fname,
+                                  output_dir=plots_encoded_path, fname=p_fname,
                                   title=title, xlabel="Tokens", ylabel="Frequency",
-                                  aspect_ratio=(12, 4), size=1.5, save_fig=SAVE_FIGURES, show_fig=SHOW_FIGURES)
+                                  aspect_ratio=(12, 4), size=1.5, save_fig=SAVE_FIGURES, show_fig=SHOW_FIGURES,
+                                  overwrite=force_overwrite)
 
 
 def main(base_path, datasets, encoding_mode, subword_models, vocab_sizes, min_vocab_frequency, make_plots, force_overwrite, split_raw_data=False):
@@ -431,15 +447,15 @@ if __name__ == "__main__":
         BASE_PATH = "/home/scarrion/datasets/nn/translation"
 
     ENCODING_MODE = "encoded"  # splits (raw), encoded (spm), [pretokenized (moses) => Force moses tokenization for everything]
-    SUBWORD_MODELS = ["word", "unigram", "char"]  # unigram, bpe, char, or word
+    SUBWORD_MODELS = ["char"]  # unigram, bpe, char, or word
     VOCAB_SIZE = [16000]
     MIN_VOCAB_FREQUENCY = 1  # Doesn't work
     MAKE_PLOTS = True
-    FORCE_OVERWRITE = True
+    FORCE_OVERWRITE = False
 
     DATASETS = [
         {"name": "multi30k", "sizes": [("original", None)], "languages": ["de-en"]},
-        {"name": "europarl", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en"]},
+        # {"name": "europarl", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en"]},
 
         # {"name": "ccaligned", "sizes": [("original", None)], "languages": ["or-en", "ti-en"]},
         # {"name": "wikimatrix", "sizes": [("original", None)], "languages": ["ar-en", "ja-en", "ko-en"]},
