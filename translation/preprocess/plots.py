@@ -5,6 +5,7 @@ from pathlib import Path
 import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
+
 sns.set()
 
 from translation import utils
@@ -31,7 +32,8 @@ def catplot(data, x, y, hue, title, xlabel, ylabel, leyend_title, output_dir, fn
     sns.set(font_scale=size)
 
     # Plot catplot
-    g = sns.catplot(data=data, x=x, y=y, hue=hue, kind="bar", legend=False, height=aspect_ratio[1], aspect=aspect_ratio[0]/aspect_ratio[1])
+    g = sns.catplot(data=data, x=x, y=y, hue=hue, kind="bar", legend=False, height=aspect_ratio[1],
+                    aspect=aspect_ratio[0] / aspect_ratio[1])
 
     # Tweaks
     g.set(xlabel=xlabel, ylabel=ylabel)
@@ -45,7 +47,7 @@ def catplot(data, x, y, hue, title, xlabel, ylabel, leyend_title, output_dir, fn
         ax = g.facet_axis(0, 0)
         for c in ax.containers:
             labels = [int(v.get_height()) for v in c]
-            ax.bar_label(c, labels=labels, label_type='edge', fontsize=8*size)
+            ax.bar_label(c, labels=labels, label_type='edge', fontsize=8 * size)
 
     # properties
     g.set(xlabel=xlabel, ylabel=ylabel)
@@ -109,8 +111,8 @@ def histogram(data, x, output_dir, fname, title="", xlabel="x", ylabel="y", bins
     # Tweaks
     g.set(xlabel=xlabel, ylabel=ylabel)
     # g.set_xticklabels(g.get_xticklabels(), rotation=90)
-    g.tick_params(axis='x', which='major', labelsize=8*size)
-    g.tick_params(axis='y', which='major', labelsize=8*size)
+    g.tick_params(axis='x', which='major', labelsize=8 * size)
+    g.tick_params(axis='y', which='major', labelsize=8 * size)
     g.yaxis.set_major_formatter(_fn_human_format)
 
     # properties
@@ -153,8 +155,6 @@ def do_all_figs_exists(output_dir, fname, formats):
 
 def _fn_human_format(x, idx=None):
     return utils.human_format(int(x), decimals=0)
-
-
 
 # def histogram(data, output_dir, fname, title="", legend_title=None, labels=None, nbins=20, bargap=0.2,
 #                show_fig=False, save_fig=True, formats=None):

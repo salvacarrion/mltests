@@ -54,13 +54,13 @@ def create_splits(base_path, datasets, val_size, test_size, shuffle, force_overw
                 lines = utils.preprocess_pairs(src_lines, trg_lines, shuffle=shuffle)
 
                 # Check size type
-                val_size = int(val_size*len(lines)) if isinstance(val_size, float) else val_size
-                test_size = int(test_size*len(lines)) if isinstance(test_size, float) else test_size
+                val_size = int(val_size * len(lines)) if isinstance(val_size, float) else val_size
+                test_size = int(test_size * len(lines)) if isinstance(test_size, float) else test_size
 
                 # Create partitions
-                assert len(lines) > (val_size+test_size)*2  # At least 50% of training data
-                train_lines = lines[:-(val_size+test_size)]
-                val_lines = lines[-(val_size+test_size):-test_size]
+                assert len(lines) > (val_size + test_size) * 2  # At least 50% of training data
+                train_lines = lines[:-(val_size + test_size)]
+                val_lines = lines[-(val_size + test_size):-test_size]
                 test_lines = lines[-test_size:]
                 splits = [(train_lines, "train"), (val_lines, "val"), (test_lines, "test")]
 
@@ -116,8 +116,10 @@ def create_reduced_versions(base_path, datasets, autofix):
                             # Add trunc file names
                             for trans_fname in trans_files:
                                 # Check level 3.1: Translation files
-                                ori_filename = os.path.join(base_path, ds_name, "original", lang_pair, "data", "splits", trans_fname)
-                                new_filename = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data", "splits", trans_fname)
+                                ori_filename = os.path.join(base_path, ds_name, "original", lang_pair, "data", "splits",
+                                                            trans_fname)
+                                new_filename = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data",
+                                                            "splits", trans_fname)
 
                                 # Copy n lines efficiently
                                 if not os.path.exists(new_filename):
@@ -151,7 +153,8 @@ def pretokenize(base_path, datasets, force_overwrite):
                 print(f"\t=> Pretokenizing: {pretokenize_path}")
                 for trans_fname in trans_files:
                     file_lang = trans_fname.split(".")[-1]
-                    ori_filename = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data", "splits", trans_fname)
+                    ori_filename = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data", "splits",
+                                                trans_fname)
                     new_filename = os.path.join(pretokenize_path, trans_fname)
 
                     # Check if the pretokenized files already exists
@@ -162,7 +165,8 @@ def pretokenize(base_path, datasets, force_overwrite):
                         commands.moses_tokenizer(lang=file_lang, input_file=ori_filename, output_file=new_filename)
 
 
-def build_vocab(base_path, datasets, encoding_mode, subword_model, vocab_size, character_coverage, merge_trains, force_overwrite):
+def build_vocab(base_path, datasets, encoding_mode, subword_model, vocab_size, character_coverage, merge_trains,
+                force_overwrite):
     print(f"- Building vocabs: (encoding_mode={encoding_mode}; subword_model={subword_model}; vocab_size={vocab_size})")
 
     for ds in datasets:  # Dataset
@@ -186,7 +190,8 @@ def build_vocab(base_path, datasets, encoding_mode, subword_model, vocab_size, c
                     raise NotImplementedError("Only merge train files is allowed")
                 else:
                     # Concat training sets
-                    train_concat_fname = "train_pretok.txt" if (encoding_mode == "pretokenized" or subword_model == "word") else "train_raw.txt"
+                    train_concat_fname = "train_pretok.txt" if (
+                                encoding_mode == "pretokenized" or subword_model == "word") else "train_raw.txt"
                     new_filename = os.path.join(vocab_data_path, train_concat_fname)
 
                     # Check if concatenated train file exists
@@ -197,20 +202,24 @@ def build_vocab(base_path, datasets, encoding_mode, subword_model, vocab_size, c
                         # Concat train files
                         with open(new_filename, 'w') as outfile:
                             for trans_fname in [f"train.{src_lang}", f"train.{trg_lang}"]:
-                                raw_folder = "pretokenized" if (encoding_mode == "pretokenized" or subword_model == "word") else "splits"
-                                ori_filename = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data", raw_folder, trans_fname)
+                                raw_folder = "pretokenized" if (
+                                            encoding_mode == "pretokenized" or subword_model == "word") else "splits"
+                                ori_filename = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data",
+                                                            raw_folder, trans_fname)
                                 with open(ori_filename) as infile:
                                     outfile.write(infile.read())
 
                 # Train model
                 model_prefix = os.path.join(model_vocab_path, f"spm_{src_lang}-{trg_lang}")  # without .model
-                if not force_overwrite and os.path.exists(model_prefix):
+                if not force_overwrite and os.path.exists(f"{model_prefix}.model"):
                     print("\t\t=> Skipping spm training as it already exists")
                 else:
-                    commands.spm_train(input_file=new_filename, model_prefix=model_prefix, vocab_size=vocab_size, character_coverage=character_coverage, subword_model=subword_model)
+                    commands.spm_train(input_file=new_filename, model_prefix=model_prefix, vocab_size=vocab_size,
+                                       character_coverage=character_coverage, subword_model=subword_model)
 
 
-def encode_datasets(base_path, datasets, encoding_mode, subword_model, vocab_size, min_vocab_frequency, export_frequencies, force_overwrite):
+def encode_datasets(base_path, datasets, encoding_mode, subword_model, vocab_size, min_vocab_frequency,
+                    export_frequencies, force_overwrite):
     print(f"- Encoding datasets: (encoding_mode={encoding_mode}; min_vocab_frequency={min_vocab_frequency})")
 
     # Sentenpiece restrictions (I don't know why)
@@ -227,7 +236,8 @@ def encode_datasets(base_path, datasets, encoding_mode, subword_model, vocab_siz
                 trans_files = utils.get_translation_files(src_lang, trg_lang)
 
                 # Get vocab dir
-                vocab_dir = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "vocabs", "spm", subword_model, str(vocab_size))
+                vocab_dir = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "vocabs", "spm", subword_model,
+                                         str(vocab_size))
                 spm_model_path = os.path.join(vocab_dir, f"spm_{src_lang}-{trg_lang}.model")
 
                 # Create encoded path
@@ -237,8 +247,10 @@ def encode_datasets(base_path, datasets, encoding_mode, subword_model, vocab_siz
 
                 # Encode files
                 print(f"\t=> Encoding: {encoded_path}")
-                new_filename_dir = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data", "encoded", subword_model, str(vocab_size))
-                raw_folder = "pretokenized" if (encoding_mode == "pretokenized" or subword_model == "word") else "splits"
+                new_filename_dir = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data", "encoded",
+                                                subword_model, str(vocab_size))
+                raw_folder = "pretokenized" if (
+                            encoding_mode == "pretokenized" or subword_model == "word") else "splits"
                 for fname in trans_files:
                     ori_filename = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data", raw_folder, fname)
                     new_filename = os.path.join(new_filename_dir, fname)
@@ -251,11 +263,13 @@ def encode_datasets(base_path, datasets, encoding_mode, subword_model, vocab_siz
                     if not force_overwrite and os.path.exists(new_filename):
                         print(f"\t\t=> Skipping encoded file as it already exists: ({fname})")
                     else:
-                        commands.spm_encode(spm_model_path=spm_model_path, input_file=ori_filename, output_file=new_filename)
+                        commands.spm_encode(spm_model_path=spm_model_path, input_file=ori_filename,
+                                            output_file=new_filename)
 
                 # Export vocab frequencies
                 if export_frequencies:
-                    export_vocab_frequencies(encoded_dir=new_filename_dir, vocab_dir=vocab_dir, src_lang=src_lang, trg_lang=trg_lang, force_overwrite=force_overwrite)
+                    export_vocab_frequencies(encoded_dir=new_filename_dir, vocab_dir=vocab_dir, src_lang=src_lang,
+                                             trg_lang=trg_lang, force_overwrite=force_overwrite)
 
 
 def export_vocab_frequencies(encoded_dir, vocab_dir, src_lang, trg_lang, force_overwrite):
@@ -280,7 +294,8 @@ def export_vocab_frequencies(encoded_dir, vocab_dir, src_lang, trg_lang, force_o
                             vocab_frequencies[tok] += 1
 
         # Save file
-        vocab_frequencies = sorted(list(vocab_frequencies.items()), key=lambda x: x[1], reverse=True)  # Descending order
+        vocab_frequencies = sorted(list(vocab_frequencies.items()), key=lambda x: x[1],
+                                   reverse=True)  # Descending order
         with open(vocab_freq_path, 'w') as f:
             f.writelines([f"{pair[0]}\t{pair[1]}\n" for pair in vocab_frequencies])
 
@@ -289,9 +304,9 @@ def plot_datasets(base_path, datasets, subword_model, vocab_size, force_overwrit
     print(f"- Plotting datasets...")
     print(f"- [WARNING]: Matplotlib might miss some images if the loop is too fast")
 
-    SAVE_FIGURES=True
-    SHOW_FIGURES=False
-    ADD_DATASET_TITLE=True
+    SAVE_FIGURES = True
+    SHOW_FIGURES = False
+    ADD_DATASET_TITLE = True
 
     # Set backend
     if SAVE_FIGURES:
@@ -313,11 +328,14 @@ def plot_datasets(base_path, datasets, subword_model, vocab_size, force_overwrit
                 print(f"\t=> Creating plots for: {base_fname}")
 
                 # Get dirs
-                vocab_dir = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "vocabs", "spm", subword_model, str(vocab_size))
-                encoded_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data", "encoded", subword_model, str(vocab_size))
+                vocab_dir = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "vocabs", "spm", subword_model,
+                                         str(vocab_size))
+                encoded_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data", "encoded",
+                                            subword_model, str(vocab_size))
 
                 # Create plot paths
-                plots_encoded_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "plots", "data", "encoded", subword_model, str(vocab_size))
+                plots_encoded_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "plots", "data",
+                                                  "encoded", subword_model, str(vocab_size))
                 for p in [plots_encoded_path]:
                     path = Path(p)
                     path.mkdir(parents=True, exist_ok=True)
@@ -367,18 +385,18 @@ def plot_datasets(base_path, datasets, subword_model, vocab_size, force_overwrit
                 title = f"Split sizes (by sentences)"
                 title = title if not ADD_DATASET_TITLE else f"{alias_name}: {title}"
                 p_fname = f"split_size_sent__{base_fname}"
-                plots.catplot(data=df, x="split", y="total_sentences",  hue="lang",
+                plots.catplot(data=df, x="split", y="total_sentences", hue="lang",
                               title=title, xlabel="Dataset partitions", ylabel="Num. of sentences", leyend_title=None,
-                              output_dir=plots_encoded_path, fname=p_fname,  aspect_ratio=(8, 4), size=1.0,
+                              output_dir=plots_encoded_path, fname=p_fname, aspect_ratio=(8, 4), size=1.0,
                               save_fig=SAVE_FIGURES, show_fig=SHOW_FIGURES, overwrite=force_overwrite)
 
                 # Plot split size (by token number): 1
                 title = f"Split sizes (by tokens)"
                 title = title if not ADD_DATASET_TITLE else f"{alias_name}: {title}"
                 p_fname = f"split_size_tok__{base_fname}"
-                plots.catplot(data=df, x="split", y="total_tokens",  hue="lang",
+                plots.catplot(data=df, x="split", y="total_tokens", hue="lang",
                               title=title, xlabel="Dataset partitions", ylabel="Num. of tokens", leyend_title=None,
-                              output_dir=plots_encoded_path, fname=p_fname,  aspect_ratio=(8, 4), size=1.0,
+                              output_dir=plots_encoded_path, fname=p_fname, aspect_ratio=(8, 4), size=1.0,
                               save_fig=SAVE_FIGURES, show_fig=SHOW_FIGURES, overwrite=force_overwrite)
 
                 # Plot vocabulary frequency: 1
@@ -403,7 +421,8 @@ def plot_datasets(base_path, datasets, subword_model, vocab_size, force_overwrit
                                   overwrite=force_overwrite)
 
 
-def main(base_path, datasets, encoding_mode, subword_models, vocab_sizes, min_vocab_frequency, make_plots, force_overwrite, split_raw_data=False):
+def main(base_path, datasets, encoding_mode, subword_models, vocab_sizes, min_vocab_frequency, make_plots,
+         force_overwrite, split_raw_data=False):
     # Checks
     if encoding_mode not in {"pretokenized", "encoded", "splits"}:
         raise ValueError(f"'encoded_mode' not valid.")
@@ -451,7 +470,7 @@ if __name__ == "__main__":
     SUBWORD_MODELS = ["word", "unigram", "char"]  # unigram, bpe, char, or word
     VOCAB_SIZE = [16000]
     MIN_VOCAB_FREQUENCY = 1  # Doesn't work
-    MAKE_PLOTS = True
+    MAKE_PLOTS = False
     FORCE_OVERWRITE = False
 
     DATASETS = [
@@ -478,4 +497,3 @@ if __name__ == "__main__":
          force_overwrite=FORCE_OVERWRITE)
 
     print("Done!")
-

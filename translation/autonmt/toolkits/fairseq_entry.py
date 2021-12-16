@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess
 import random
 import shutil
+
 random.seed(123)
 
 from translation.autonmt import commands
@@ -39,7 +40,8 @@ def fairseq_preprocess(ds_path, src_lang, trg_lang, subword_model, vocab_size, f
     path.mkdir(parents=True, exist_ok=True)
 
     # Copy vocabs and fix separator
-    ori_vocab_path = os.path.join(ds_path, "vocabs", "spm", subword_model, str(vocab_size), f"spm_{src_lang}-{trg_lang}.vocabf")
+    ori_vocab_path = os.path.join(ds_path, "vocabs", "spm", subword_model, str(vocab_size),
+                                  f"spm_{src_lang}-{trg_lang}.vocabf")
     src_vocab_fairseq_path = os.path.join(data_bin_path, f"dict.{src_lang}.txt")
     trg_vocab_fairseq_path = os.path.join(data_bin_path, f"dict.{trg_lang}.txt")
     shutil.copyfile(ori_vocab_path, src_vocab_fairseq_path)
@@ -49,15 +51,18 @@ def fairseq_preprocess(ds_path, src_lang, trg_lang, subword_model, vocab_size, f
 
     # Preprocess
     data_path = os.path.join(ds_path, "data", "encoded", subword_model, str(vocab_size))
-    fairseq_preprocess_with_vocab(data_path, data_bin_path=data_bin_path, src_lang=src_lang, trg_lang=trg_lang, src_vocab_path=src_vocab_fairseq_path, trg_vocab_path=trg_vocab_fairseq_path)
+    fairseq_preprocess_with_vocab(data_path, data_bin_path=data_bin_path, src_lang=src_lang, trg_lang=trg_lang,
+                                  src_vocab_path=src_vocab_fairseq_path, trg_vocab_path=trg_vocab_fairseq_path)
 
 
-def fairseq_preprocess_with_vocab(data_path, data_bin_path, src_lang, trg_lang, src_vocab_path=None, trg_vocab_path=None, train_fname="train", val_fname="val", test_fname="test"):
+def fairseq_preprocess_with_vocab(data_path, data_bin_path, src_lang, trg_lang, src_vocab_path=None,
+                                  trg_vocab_path=None, train_fname="train", val_fname="val", test_fname="test"):
     val_fname = f"--validpref {data_path}/{val_fname}" if val_fname else ""
     cmd = f"fairseq-preprocess --source-lang {src_lang} --target-lang {trg_lang} --trainpref {data_path}/{train_fname} {val_fname} --testpref {data_path}/{test_fname} --destdir {data_bin_path} --workers $(nproc)"
     cmd += f" --srcdict {src_vocab_path}" if src_vocab_path else ""
     cmd += f" --tgtdict {trg_vocab_path}" if trg_vocab_path else ""
-    subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {cmd}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
+    subprocess.call(['/bin/bash', '-i', '-c',
+                     f"conda activate {CONDA_ENVNAME} && {cmd}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
 
 
 def fairseq_train(data_path, run_name, subword_model, vocab_size, model_path, num_gpus, force_overwrite, interactive):
@@ -119,8 +124,8 @@ def fairseq_train(data_path, run_name, subword_model, vocab_size, model_path, nu
         "--patience 10",
         "--seed 1234",
         # "--warmup-updates 4000",
-        #"--lr-scheduler reduce_lr_on_plateau",
-       ]
+        # "--lr-scheduler reduce_lr_on_plateau",
+    ]
 
     # Add checkpoint stuff
     train_command += [
@@ -128,7 +133,7 @@ def fairseq_train(data_path, run_name, subword_model, vocab_size, model_path, nu
         "--no-epoch-checkpoints",
         "--maximize-best-checkpoint-metric",
         "--best-checkpoint-metric bleu",
-        ]
+    ]
 
     # Add evaluation stuff
     train_command += [
@@ -152,7 +157,8 @@ def fairseq_train(data_path, run_name, subword_model, vocab_size, model_path, nu
 
     # Run command
     train_command = " ".join(train_command)
-    subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {num_gpus} {train_command}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
+    subprocess.call(['/bin/bash', '-i', '-c',
+                     f"conda activate {CONDA_ENVNAME} && {num_gpus} {train_command}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
 
 
 def fairseq_translate(data_path, checkpoint_path, output_path, src_lang, trg_lang, subword_model, spm_model_path,
@@ -194,7 +200,8 @@ def fairseq_translate(data_path, checkpoint_path, output_path, src_lang, trg_lan
 
     # Run command
     gen_command = " ".join(gen_command)
-    subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {gen_command}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
+    subprocess.call(['/bin/bash', '-i', '-c',
+                     f"conda activate {CONDA_ENVNAME} && {gen_command}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
 
     # Extract sentences from generate-test.txt
     gen_test_path = os.path.join(output_path, "generate-test.txt")
@@ -215,7 +222,6 @@ def fairseq_translate(data_path, checkpoint_path, output_path, src_lang, trg_lan
     commands.spm_decode(spm_model_path, input_file=src_tok_path, output_file=src_txt_path)
     commands.spm_decode(spm_model_path, input_file=ref_tok_path, output_file=ref_txt_path)
     commands.spm_decode(spm_model_path, input_file=hyp_tok_path, output_file=hyp_txt_path)
-
 
     # Score
     if score:

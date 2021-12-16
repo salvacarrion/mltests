@@ -26,15 +26,15 @@ save_data: models/run/example
 
 ## Datasets
 data:
-    train:
-        path_src: pretokenized/train.de
-        path_tgt: pretokenized/train.en
-        transforms: [filtertoolong]
-        weight: 1
-    valid:
-        path_src: pretokenized/val.de
-        path_tgt: pretokenized/val.en
-        transforms: []
+  train:
+    path_src: pretokenized/train.de
+    path_tgt: pretokenized/train.en
+    transforms: [ filtertoolong ]
+    weight: 1
+  valid:
+    path_src: pretokenized/val.de
+    path_tgt: pretokenized/val.en
+    transforms: [ ]
 
 ## Where the vocab(s) will be written
 src_vocab: models/run/opennmt-vocab.src
@@ -62,14 +62,14 @@ valid_steps: 226
 #queue_size: 10000
 bucket_size: 2048
 world_size: 1
-gpu_ranks: [0]
+gpu_ranks: [ 0 ]
 batch_size: 128
 #batch_type: "tokens"
 #batch_size_multiple: 1
 #valid_batch_size: 16
 max_generator_batches: 0
-accum_count: [1]
-accum_steps: [0]
+accum_count: [ 1 ]
+accum_steps: [ 0 ]
 
 # Optimization
 model_dtype: "fp32"
@@ -93,8 +93,8 @@ heads: 8
 rnn_size: 256
 word_vec_size: 256
 transformer_ff: 512
-dropout: [0.1]
-attention_dropout: [0.1]
+dropout: [ 0.1 ]
+attention_dropout: [ 0.1 ]
 share_decoder_embeddings: false
 share_embeddings: false
-dropout_steps: [0]
+dropout_steps: [ 0 ]
