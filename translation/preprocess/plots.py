@@ -98,6 +98,7 @@ def catplot(data, x, y, hue, title, xlabel, ylabel, leyend_title, output_dir, fn
         plt.show()
 
     # Close figure
+    plt.close(fig)
     plt.close()
 
 
@@ -142,6 +143,7 @@ def barplot(data, x, y, output_dir, fname, title="", xlabel="x", ylabel="y", asp
         plt.show()
 
     # Close figure
+    plt.close(fig)
     plt.close()
 
 
@@ -186,4 +188,5 @@ def histogram(data, x, output_dir, fname, title="", xlabel="x", ylabel="y", bins
         plt.show()
 
     # Close figure
+    plt.close(fig)
     plt.close()
