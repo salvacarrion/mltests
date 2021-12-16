@@ -68,3 +68,17 @@ def get_frequencies(filename):
             for tok in tokens:
                 vocab_frequencies[tok] += 1
     return vocab_frequencies
+
+
+def human_format(num, decimals=2):
+    if num < 10000:
+        return str(num)
+    else:
+        magnitude = 0
+        template = f'%.{decimals}f%s'
+
+        while abs(num) >= 1000:
+            magnitude += 1
+            num /= 1000.0
+
+        return template % (num, ['', 'K', 'M', 'G', 'T', 'P'][magnitude])

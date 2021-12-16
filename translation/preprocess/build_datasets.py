@@ -1,11 +1,18 @@
+import json
 import os
 from pathlib import Path
 from itertools import islice
 from collections import defaultdict
 import random
+
+import pandas as pd
+import tqdm
+
+import numpy as np
+
 random.seed(123)
 
-from translation.preprocess.utils import *
+from translation.preprocess import utils, plots
 from translation.autonmt import commands
 
 CONDA_ENVNAME = "mltests"
@@ -44,7 +51,7 @@ def create_splits(base_path, datasets, val_size, test_size, shuffle, force_overw
                     trg_lines = f.readlines()
 
                 # Clean lines
-                lines = preprocess_pairs(src_lines, trg_lines, shuffle=shuffle)
+                lines = utils.preprocess_pairs(src_lines, trg_lines, shuffle=shuffle)
 
                 # Check size type
                 val_size = int(val_size*len(lines)) if isinstance(val_size, float) else val_size
@@ -79,7 +86,7 @@ def create_reduced_versions(base_path, datasets, autofix):
             # LEVEL 2: Languages
             for lang_pair in ds["languages"]:  # Languages
                 src_lang, trg_lang = lang_pair.split("-")
-                trans_files = get_translation_files(src_lang, trg_lang)
+                trans_files = utils.get_translation_files(src_lang, trg_lang)
 
                 if ds_size_name == "original":  # Check for splits
                     for trans_fname in trans_files:
@@ -133,7 +140,7 @@ def pretokenize(base_path, datasets, force_overwrite):
         for ds_size_name, ds_max_lines in ds["sizes"]:  # Lengths
             for lang_pair in ds["languages"]:  # Languages
                 src_lang, trg_lang = lang_pair.split("-")
-                trans_files = get_translation_files(src_lang, trg_lang)
+                trans_files = utils.get_translation_files(src_lang, trg_lang)
 
                 # Create folder
                 pretokenize_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data", "pretokenized")
@@ -163,7 +170,7 @@ def build_vocab(base_path, datasets, encoding_mode, subword_model, vocab_size, c
         for ds_size_name, ds_max_lines in ds["sizes"]:  # Lengths
             for lang_pair in ds["languages"]:  # Languages
                 src_lang, trg_lang = lang_pair.split("-")
-                trans_files = get_translation_files(src_lang, trg_lang)
+                trans_files = utils.get_translation_files(src_lang, trg_lang)
 
                 # Create dirs
                 vocab_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "vocabs", "spm")
@@ -217,7 +224,7 @@ def encode_datasets(base_path, datasets, encoding_mode, subword_model, vocab_siz
         for ds_size_name, ds_max_lines in ds["sizes"]:  # Lengths
             for lang_pair in ds["languages"]:  # Languages
                 src_lang, trg_lang = lang_pair.split("-")
-                trans_files = get_translation_files(src_lang, trg_lang)
+                trans_files = utils.get_translation_files(src_lang, trg_lang)
 
                 # Get vocab dir
                 vocab_dir = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "vocabs", "spm", subword_model, str(vocab_size))
@@ -229,6 +236,7 @@ def encode_datasets(base_path, datasets, encoding_mode, subword_model, vocab_siz
                 path.mkdir(parents=True, exist_ok=True)
 
                 # Encode files
+                print(f"\t=> Encoding: {encoded_path}")
                 new_filename_dir = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data", "encoded", subword_model, str(vocab_size))
                 raw_folder = "pretokenized" if (encoding_mode == "pretokenized" or subword_model == "word") else "splits"
                 for fname in trans_files:
@@ -265,7 +273,7 @@ def export_vocab_frequencies(encoded_dir, vocab_dir, src_lang, trg_lang, force_o
         vocab_frequencies = defaultdict(int)
         for fname in [f"train.{src_lang}", f"train.{trg_lang}"]:
             with open(os.path.join(encoded_dir, fname), 'r') as f:
-                for line in tqdm(f):
+                for line in tqdm.tqdm(f):
                     tokens = line.strip().split(' ')
                     for tok in tokens:
                         if tok in vocabs:  # Count only the tokens that exists in the vocab
@@ -277,7 +285,108 @@ def export_vocab_frequencies(encoded_dir, vocab_dir, src_lang, trg_lang, force_o
             f.writelines([f"{pair[0]}\t{pair[1]}\n" for pair in vocab_frequencies])
 
 
-def main(base_path, datasets, encoding_mode, subword_models, vocab_sizes, min_vocab_frequency, force_overwrite, split_raw_data=False):
+def plot_datasets(base_path, datasets, subword_model, vocab_size, force_overwrite):
+    print(f"- Plotting datasets...")
+    print(f"- [WARNING]: Matplotlib might miss some images if the loop is too fast")
+
+    SAVE_FIGURES=True
+    SHOW_FIGURES=False
+
+    for ds in datasets:  # Dataset
+        ds_name = ds["name"]
+        for ds_size_name, ds_max_lines in ds["sizes"]:  # Lengths
+            for lang_pair in ds["languages"]:  # Languages
+                src_lang, trg_lang = lang_pair.split("-")
+                trans_files = utils.get_translation_files(src_lang, trg_lang)
+
+                # Set base path
+                base_fname = f"{ds_name}_{ds_size_name}_{lang_pair}__{subword_model}_{str(vocab_size)}"
+                print(f"\t=> Creating plots for: {base_fname}")
+
+                # Get dirs
+                vocab_dir = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "vocabs", "spm", subword_model, str(vocab_size))
+                encoded_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data", "encoded", subword_model, str(vocab_size))
+
+                # Create plot paths
+                plots_vocabs_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "plots", "vocabs", subword_model, str(vocab_size))
+                plots_encoded_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "plots", "data", "encoded", subword_model, str(vocab_size))
+                for p in [plots_vocabs_path, plots_encoded_path]:
+                    path = Path(p)
+                    path.mkdir(parents=True, exist_ok=True)
+
+                print(f"\t\t=> Creating 'Sentence length distribution' plots...")
+                split_stats = {}
+                for fname in trans_files:
+                    split_name, split_lang = fname.split('.')
+                    tokens_by_sentence = np.array(plots.get_tokens_by_sentence(filename=os.path.join(encoded_path, fname)))
+
+                    row = {
+                        "total_sentences": len(tokens_by_sentence),
+                        "total_tokens": int(tokens_by_sentence.sum()),
+                        "max_tokens": int(np.max(tokens_by_sentence)),
+                        "min_tokens": int(np.min(tokens_by_sentence)),
+                        "avg_tokens": float(np.average(tokens_by_sentence)),
+                        "std_tokens": float(np.std(tokens_by_sentence)),
+                        "percentile5_tokens": int(np.percentile(tokens_by_sentence, 5)),
+                        "percentile50_tokens": int(np.percentile(tokens_by_sentence, 50)),
+                        "percentile95_tokens": int(np.percentile(tokens_by_sentence, 95)),
+                        "split": split_name.title(),
+                        "lang": split_lang,
+                        "alias": f"{split_name.title()} ({split_lang})",
+                    }
+                    split_stats[fname] = row
+
+                    # Plot sentence length distribution (by tokens' length): 3x2
+                    df = pd.DataFrame(tokens_by_sentence, columns=["frequency"])
+                    title = f"Sentence length distribution"
+                    p_fname = f"sent_distr_{split_name}_{split_lang}__{base_fname}"
+                    plots.histogram(data=df, x="frequency", output_dir=plots_encoded_path, fname=p_fname,
+                                    title=title, xlabel="Tokens per sentence", ylabel="Frequency", bins=100,
+                                    aspect_ratio=(6, 4), size=1.5, save_fig=SAVE_FIGURES, show_fig=SHOW_FIGURES)
+
+                # Save statistical data
+                with open(os.path.join(plots_encoded_path, f"stats__{base_fname}.json"), 'w') as f:
+                    json.dump(split_stats, f)
+
+                # Get data
+                df = pd.DataFrame(list(split_stats.values()))
+
+                # Plot split size (by its sentence number): 1
+                print(f"\t\t=> Creating 'Split sizes' plots...")
+                title = f"Split sizes (by sentences)"
+                p_fname = f"split_size_sent__{base_fname}"
+                plots.catplot(data=df, x="split", y="total_sentences",  hue="lang",
+                              title=title, xlabel="Dataset partitions", ylabel="Num. of sentences", leyend_title=None,
+                              output_dir=plots_encoded_path, fname=p_fname,  aspect_ratio=(8, 4), size=1.0, save_fig=SAVE_FIGURES, show_fig=SHOW_FIGURES)
+
+                # Plot split size (by token number): 1
+                title = f"Split sizes (by tokens)"
+                p_fname = f"split_size_tok__{base_fname}"
+                plots.catplot(data=df, x="split", y="total_tokens",  hue="lang",
+                              title=title, xlabel="Dataset partitions", ylabel="Num. of tokens", leyend_title=None,
+                              output_dir=plots_encoded_path, fname=p_fname,  aspect_ratio=(8, 4), size=1.0, save_fig=SAVE_FIGURES, show_fig=SHOW_FIGURES)
+
+                # Plot vocabulary frequency: 1
+                print(f"\t\t=> Creating 'Vocabulary distribution' plots...")
+
+                # Load vocabulary
+                vocab_freq_path = os.path.join(vocab_dir, f"spm_{src_lang}-{trg_lang}.vocabf")
+                with open(vocab_freq_path, 'r') as f:
+                    rows = [line.split('\t') for line in f.readlines()]
+                    df = pd.DataFrame(rows, columns=["token", "frequency"])
+                    df["frequency"] = df["frequency"].astype(int)
+                    df = df.sort_values(by='frequency', ascending=False, na_position='last')
+
+                for top_k in [100, 150]:
+                    title = f"Vocabulary distribution (top {str(top_k)})"
+                    p_fname = f"vocab_distr_top{str(top_k)}__{base_fname}"
+                    plots.barplot(data=df.head(top_k), x="token", y="frequency",
+                                  output_dir=plots_vocabs_path, fname=p_fname,
+                                  title=title, xlabel="Tokens", ylabel="Frequency",
+                                  aspect_ratio=(12, 4), size=1.5, save_fig=SAVE_FIGURES, show_fig=SHOW_FIGURES)
+
+
+def main(base_path, datasets, encoding_mode, subword_models, vocab_sizes, min_vocab_frequency, make_plots, force_overwrite, split_raw_data=False):
     # Checks
     if encoding_mode not in {"pretokenized", "encoded", "splits"}:
         raise ValueError(f"'encoded_mode' not valid.")
@@ -304,10 +413,14 @@ def main(base_path, datasets, encoding_mode, subword_models, vocab_sizes, min_vo
                         force_overwrite=force_overwrite)
 
             # Encode datasets
-            if encoding_mode == "encoded":
-                encode_datasets(base_path=base_path, datasets=datasets, encoding_mode=encoding_mode,
-                                subword_model=sw_model, vocab_size=voc_size, min_vocab_frequency=min_vocab_frequency,
-                                export_frequencies=True, force_overwrite=force_overwrite)
+            encode_datasets(base_path=base_path, datasets=datasets, encoding_mode=encoding_mode,
+                            subword_model=sw_model, vocab_size=voc_size, min_vocab_frequency=min_vocab_frequency,
+                            export_frequencies=True, force_overwrite=force_overwrite)
+
+            # Plots
+            if make_plots:
+                plot_datasets(base_path=base_path, datasets=datasets, subword_model=sw_model, vocab_size=voc_size,
+                              force_overwrite=force_overwrite)
 
 
 if __name__ == "__main__":
@@ -318,14 +431,15 @@ if __name__ == "__main__":
         BASE_PATH = "/home/scarrion/datasets/nn/translation"
 
     ENCODING_MODE = "encoded"  # splits (raw), encoded (spm), [pretokenized (moses) => Force moses tokenization for everything]
-    SUBWORD_MODELS = ["word", "char", "unigram"]  # unigram, bpe, char, or word
+    SUBWORD_MODELS = ["word", "unigram", "char"]  # unigram, bpe, char, or word
     VOCAB_SIZE = [16000]
     MIN_VOCAB_FREQUENCY = 1  # Doesn't work
+    MAKE_PLOTS = True
     FORCE_OVERWRITE = True
 
     DATASETS = [
         {"name": "multi30k", "sizes": [("original", None)], "languages": ["de-en"]},
-        # {"name": "europarl", "sizes": [("50k", 50000)], "languages": ["es-en"]},
+        {"name": "europarl", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en"]},
 
         # {"name": "ccaligned", "sizes": [("original", None)], "languages": ["or-en", "ti-en"]},
         # {"name": "wikimatrix", "sizes": [("original", None)], "languages": ["ar-en", "ja-en", "ko-en"]},
@@ -340,7 +454,8 @@ if __name__ == "__main__":
 
     # Create datasets
     main(base_path=BASE_PATH, datasets=DATASETS, encoding_mode=ENCODING_MODE, subword_models=SUBWORD_MODELS,
-         vocab_sizes=VOCAB_SIZE, min_vocab_frequency=MIN_VOCAB_FREQUENCY, force_overwrite=FORCE_OVERWRITE)
+         vocab_sizes=VOCAB_SIZE, min_vocab_frequency=MIN_VOCAB_FREQUENCY, make_plots=MAKE_PLOTS,
+         force_overwrite=FORCE_OVERWRITE)
 
     print("Done!")
 
