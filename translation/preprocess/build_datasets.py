@@ -1,4 +1,3 @@
-import json
 import os
 from pathlib import Path
 from itertools import islice
@@ -12,7 +11,8 @@ import numpy as np
 
 random.seed(123)
 
-from translation.preprocess import utils, plots
+from translation.preprocess import plots
+from translation import utils
 from translation.autonmt import commands
 
 CONDA_ENVNAME = "mltests"
@@ -326,7 +326,8 @@ def plot_datasets(base_path, datasets, subword_model, vocab_size, force_overwrit
                 split_stats = {}
                 for fname in trans_files:
                     split_name, split_lang = fname.split('.')
-                    tokens_by_sentence = np.array(utils.get_tokens_by_sentence(filename=os.path.join(encoded_path, fname)))
+                    tokens_by_sentence = np.array(
+                        utils.get_tokens_by_sentence(filename=os.path.join(encoded_path, fname)))
 
                     # Compute data
                     row = {

@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 sns.set()
 
-from translation.preprocess import utils
+from translation import utils
 
 
 def set_non_gui_backend():

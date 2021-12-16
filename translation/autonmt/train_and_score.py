@@ -1,15 +1,20 @@
+import datetime
 import os
+import time
 from pathlib import Path
+import logging
 import random
+
+import pandas as pd
+
 random.seed(123)
 
+from translation import utils
 from translation.autonmt.toolkits import fairseq_entry
-from translation.autonmt import commands
-
-CONDA_OPENNMT_ENVNAME = "mltests"
+from translation.autonmt import commands, LOGS_PATH
 
 
-def preprocess(toolkit, base_path, datasets, subword_model, vocab_size, force_overwrite):
+def preprocess(toolkit, base_path, datasets, subword_model, vocab_size, force_overwrite, interactive):
     print(f"- Preprocess: (subword_model={subword_model}; vocab_size={vocab_size})")
 
     for ds in datasets:  # Training dataset
@@ -23,12 +28,13 @@ def preprocess(toolkit, base_path, datasets, subword_model, vocab_size, force_ov
 
                 # Select toolkit
                 if toolkit == "fairseq":
-                    fairseq_entry.fairseq_preprocess(ds_path, src_lang, trg_lang, subword_model, vocab_size, force_overwrite)
+                    fairseq_entry.fairseq_preprocess(ds_path, src_lang, trg_lang, subword_model, vocab_size,
+                                                     force_overwrite, interactive=interactive)
                 else:
                     raise NotImplementedError(f"Unknown toolkit: {toolkit}")
 
 
-def train(toolkit, base_path, datasets, run_name, subword_model, vocab_size, force_overwrite, num_gpus):
+def train(toolkit, base_path, datasets, run_name, subword_model, vocab_size, num_gpus, force_overwrite, interactive):
     # Run name
     print(f"- Train & Score: (run_name={run_name}, subword_model={subword_model}; vocab_size={vocab_size})")
 
@@ -44,12 +50,14 @@ def train(toolkit, base_path, datasets, run_name, subword_model, vocab_size, for
                 # Select toolkit
                 if toolkit == "fairseq":
                     fairseq_entry.fairseq_train(data_path=ds_path, run_name=run_name, subword_model=subword_model,
-                                                vocab_size=vocab_size, force_overwrite=force_overwrite, num_gpus=num_gpus)
+                                                vocab_size=vocab_size, model_path=None, num_gpus=num_gpus,
+                                                force_overwrite=force_overwrite, interactive=interactive)
                 else:
                     raise NotImplementedError(f"Unknown toolkit: {toolkit}")
 
 
-def evaluate(toolkit, base_path, train_datasets, eval_datasets, run_name, subword_model, vocab_size, beams, metrics, force_overwrite):
+def evaluate(toolkit, base_path, train_datasets, eval_datasets, run_name, subword_model, vocab_size, beams, metrics,
+             force_overwrite, interactive):
     # Run name
     print(f"- Evaluate models: (run_name={run_name}, subword_model={subword_model}; vocab_size={vocab_size})")
 
@@ -70,12 +78,13 @@ def evaluate(toolkit, base_path, train_datasets, eval_datasets, run_name, subwor
                                    eval_datasets=eval_datasets, run_name=run_name,
                                    checkpoint_path=checkpoint_path, spm_model_path=spm_model_path, beams=beams,
                                    subword_model=subword_model, vocab_size=vocab_size, metrics=metrics,
-                                   force_overwrite=force_overwrite)
+                                   force_overwrite=force_overwrite, interactive=interactive)
 
 
 def evaluate_model(toolkit, base_path, model_ds_path, eval_datasets, run_name, checkpoint_path, spm_model_path, beams,
-                   subword_model, vocab_size, metrics, force_overwrite):
-    # model_ds_path => Dataset path where the trained model is
+                   subword_model, vocab_size, metrics, force_overwrite, interactive):
+    # model_ds_path =>  Dataset path where the trained model can be found
+    # eval_ds_path => Dataset path where the evaluations datasets can be found
 
     print(f"- Evaluate model: (run_name= {run_name}, checkpoint_path={checkpoint_path}, beams={str(beams)}])")
     for ds in eval_datasets:  # Dataset name (to evaluate)
@@ -126,7 +135,11 @@ def evaluate_model(toolkit, base_path, model_ds_path, eval_datasets, run_name, c
                     if not force_overwrite and os.path.exists(eval_data_bin_path):
                         print("=> Skipping preprocessing as the directory already exists")
                     else:
-                        fairseq_entry.fairseq_preprocess_with_vocab(data_path=eval_data_path, data_bin_path=eval_data_bin_path, src_lang=src_lang, trg_lang=trg_lang, src_vocab_path=src_vocab_path, trg_vocab_path=trg_vocab_path, train_fname="test", val_fname=None)
+                        fairseq_entry.fairseq_preprocess_with_vocab(data_path=eval_data_path,
+                                                                    data_bin_path=eval_data_bin_path, src_lang=src_lang,
+                                                                    trg_lang=trg_lang, src_vocab_path=src_vocab_path,
+                                                                    trg_vocab_path=trg_vocab_path, train_fname="test",
+                                                                    val_fname=None)
 
                     for beam_width in beams:
                         # Create output path (if needed)
@@ -139,13 +152,13 @@ def evaluate_model(toolkit, base_path, model_ds_path, eval_datasets, run_name, c
                                                         output_path=beam_output_path, src_lang=src_lang, trg_lang=trg_lang,
                                                         subword_model=subword_model, spm_model_path=spm_model_path,
                                                         force_overwrite=force_overwrite, beam_width=beam_width,
-                                                        score=True, metrics=metrics)
+                                                        score=True, metrics=metrics, interactive=interactive)
 
                 else:
                     raise NotImplementedError(f"Unknown toolkit: {toolkit}")
 
 
-if __name__ == "__main__":
+def main():
     # Get base path
     if os.environ.get("LOCAL_GPU"):
         BASE_PATH = "/home/salva/Documents/datasets/nn/translation"
@@ -153,11 +166,12 @@ if __name__ == "__main__":
         BASE_PATH = "/home/scarrion/datasets/nn/translation"
 
     # Variables
-    SUBWORD_MODELS = ["word", "unigram", "char"]  # unigram, bpe, char, or word
+    SUBWORD_MODELS = ["word"]  # unigram, bpe, char, or word
     VOCAB_SIZE = [16000]
     BEAMS = [1, 5]
     NUM_GPUS = None  # None=default; 1=[0]; 2=[0,1];...
-    FORCE_OVERWRITE = True
+    FORCE_OVERWRITE = False
+    INTERACTIVE = True
     TOOLKIT = "fairseq"
     RUN_NAME = "mymodel"
     METRICS = {"bleu", "chrf", "ter", "bertscore", "comet"}
@@ -182,20 +196,131 @@ if __name__ == "__main__":
         {"name": "iwlst16", "sizes": [("original", None)], "languages": ["de-en"]},
     ]
 
+    # Execute runs
+    rows = []
+    runs_counter = 0
     for sw_model in SUBWORD_MODELS:
         for voc_size in VOCAB_SIZE:
+            # Variables
+            runs_counter += 1
             run_name = f"{RUN_NAME}_{sw_model}_{voc_size}"
+            row = {}
 
-            # Preprocess datasets
-            preprocess(toolkit=TOOLKIT, base_path=BASE_PATH, datasets=TRAIN_DATASETS, subword_model=sw_model,
-                       vocab_size=voc_size, force_overwrite=FORCE_OVERWRITE)
+            # Summary
+            logging.info(f"***** Starting new run *****")
+            logging.info(f"- Summary for ({str(run_name)}):")
+            logging.info(f"\t- Subword model: {str(sw_model)}")
+            logging.info(f"\t- Vocabulary size: {str(voc_size)}")
+            logging.info(f"\t- Num. GPUs: {str(NUM_GPUS)}")
+            logging.info(f"\t- Force overwrite: {str(FORCE_OVERWRITE)}")
+            logging.info(f"\t- Interactive: {str(INTERACTIVE)}")
+            logging.info(f"\t- Toolkit: {str(TOOLKIT)}")
+            logging.info(f"\t- Run name: {str(run_name)}")
+            logging.info(f"\t- metrics: {str(METRICS)}")
 
-            # Train model
-            train(toolkit=TOOLKIT, base_path=BASE_PATH, datasets=TRAIN_DATASETS, run_name=run_name, subword_model=sw_model,
-                  vocab_size=voc_size, force_overwrite=FORCE_OVERWRITE, num_gpus=NUM_GPUS)
+            # Add to row
+            row["run_name"] = str(run_name)
+            row["run_start_time"] = str(datetime.datetime.now())
+            row["toolkit"] = str(TOOLKIT)
+            row["metrics"] = str(METRICS)
+            row["num_gpus"] = str(NUM_GPUS)
+            row["force_overwrite"] = str(FORCE_OVERWRITE)
+            row["interactive"] = str(INTERACTIVE)
+            row["subword_model"] = str(sw_model)
+            row["vocab_size"] = str(voc_size)
+
+            train_eval_status = "okay"
+            try:
+                # Preprocess datasets
+                logging.info(f"***** Preprocessing started *****")
+                start_preprocessing = time.time()
+                row["start_preprocessing"] = start_preprocessing
+
+                preprocess(toolkit=TOOLKIT, base_path=BASE_PATH, datasets=TRAIN_DATASETS, subword_model=sw_model,
+                           vocab_size=voc_size, force_overwrite=FORCE_OVERWRITE, interactive=INTERACTIVE)
+
+                end_preprocessing = time.time()
+                row["end_preprocessing"] = end_preprocessing
+                elapsed_preprocessing = end_preprocessing - start_preprocessing
+                elapsed_preprocessing_str = time.strftime("%H:%M:%S", time.gmtime(elapsed_preprocessing))
+                row["elapsed_preprocessing"] = elapsed_preprocessing
+                row["elapsed_preprocessing_str"] = elapsed_preprocessing_str
+                logging.info("----- [Preprocessing] Time elapsed (ss.ms): {} -----".format(elapsed_preprocessing))
+                logging.info("----- [Preprocessing] Time elapsed (hh:mm:ss.ms): {} -----".format(elapsed_preprocessing_str))
+                logging.info(f"***** Preprocessing ended *****")
+
+                # Train model
+                logging.info(f"***** Training started *****")
+                start_training = time.time()
+
+                train(toolkit=TOOLKIT, base_path=BASE_PATH, datasets=TRAIN_DATASETS, run_name=run_name, subword_model=sw_model,
+                      vocab_size=voc_size, num_gpus=NUM_GPUS, force_overwrite=FORCE_OVERWRITE, interactive=INTERACTIVE)
+
+                end_training = time.time()
+                row["end_training"] = end_training
+                elapsed_training = end_training - start_training
+                elapsed_training_str = time.strftime("%H:%M:%S", time.gmtime(elapsed_training))
+                row["elapsed_training"] = elapsed_training
+                row["elapsed_training_str"] = elapsed_training_str
+                logging.info("----- [Training] Time elapsed (ss.ms): {} -----".format(elapsed_training))
+                logging.info("----- [Training] Time elapsed (hh:mm:ss.ms): {} -----".format(elapsed_training_str))
+                logging.info(f"***** Training preprocessing *****")
+            except Exception as e:
+                logging.error(e)
+                train_eval_status = str(e)
+            finally:
+                row["train_score_status"] = train_eval_status
+                logging.info(f"***** Preprocessing/Training ended *****")
 
             # Evaluate models
-            evaluate(toolkit=TOOLKIT, base_path=BASE_PATH, train_datasets=TRAIN_DATASETS, eval_datasets=EVAL_DATASETS,
-                     run_name=run_name, subword_model=sw_model, vocab_size=voc_size, beams=BEAMS,
-                     metrics=METRICS, force_overwrite=FORCE_OVERWRITE)
-    print("Done!")
+            eval_status = "okay"
+            try:
+                logging.info(f"***** Evaluation started *****")
+                start_evaluate = time.time()
+                row["start_evaluate"] = start_evaluate
+
+                evaluate(toolkit=TOOLKIT, base_path=BASE_PATH, train_datasets=TRAIN_DATASETS,
+                         eval_datasets=EVAL_DATASETS,
+                         run_name=run_name, subword_model=sw_model, vocab_size=voc_size, beams=BEAMS,
+                         metrics=METRICS, force_overwrite=FORCE_OVERWRITE, interactive=INTERACTIVE)
+
+                end_evaluate = time.time()
+                elapsed_evaluate = end_evaluate - start_evaluate
+                elapsed_evaluate_str = time.strftime("%H:%M:%S", time.gmtime(elapsed_evaluate))
+                row["elapsed_evaluate"] = elapsed_evaluate
+                row["elapsed_evaluate_str"] = elapsed_evaluate_str
+                logging.info("----- [Evaluation] Time elapsed (s.ms): {} -----".format(elapsed_evaluate))
+                logging.info("----- [Evaluation] Time elapsed (hh:mm:ss.ms): {} -----".format(elapsed_evaluate_str))
+            except Exception as e:
+                logging.error(e)
+                eval_status = str(e)
+            finally:
+                row["evaluation_status"] = eval_status
+                logging.info(f"***** Evaluation ended *****")
+
+            # Add row to rows
+            row["run_end_time"] = str(datetime.datetime.now())
+            rows.append(row)
+
+            # Serve partial_runs
+            try:
+                # Create logs path
+                path = Path(LOGS_PATH, "runs")
+                path.mkdir(parents=True, exist_ok=True)
+
+                utils.save_json(row, os.path.join(path, f"{str(runs_counter)}__{run_name}__{str(datetime.datetime.now())}.json"))
+            except Exception as e:
+                logging.error(e)
+
+    # Save pandas with results
+    df = pd.DataFrame(rows)
+    df.to_csv(os.path.join(LOGS_PATH, "runs", f"runs_summary__{str(datetime.datetime.now())}.csv"), index=False)
+
+    logging.info(f"- Total runs: {runs_counter}")
+    logging.info(f"########## DONE! ##########")
+
+
+if __name__ == "__main__":
+    main()
+
+

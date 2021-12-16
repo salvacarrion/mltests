@@ -11,7 +11,7 @@ from translation.autonmt import commands
 CONDA_ENVNAME = "fairseq"
 
 
-def fairseq_preprocess(ds_path, src_lang, trg_lang, subword_model, vocab_size, force_overwrite):
+def fairseq_preprocess(ds_path, src_lang, trg_lang, subword_model, vocab_size, force_overwrite, interactive):
     # Create path (if needed)
     toolkit_path = os.path.join(ds_path, "models", "fairseq")
     path = Path(toolkit_path)
@@ -20,15 +20,19 @@ def fairseq_preprocess(ds_path, src_lang, trg_lang, subword_model, vocab_size, f
     # Check if data-bin exists
     data_bin_path = os.path.join(toolkit_path, "data-bin", subword_model, str(vocab_size))
     if not force_overwrite and os.path.exists(data_bin_path):
-        print(f"\t=> The following directory is going to be delete: {data_bin_path}")
-        res = input(f"\t=> Do you want to continue? [y/N]")
-        if res.lower().strip() == 'y':
-            print(f"\t=> Deleting directory... ({data_bin_path})")
-            shutil.rmtree(data_bin_path)
-        else:
-            print("\t=> Operation cancelled")
+        if not interactive:
             print("\t=> Skipping preprocessing as it already exists")
             return
+        else:
+            print(f"\t=> The following directory is going to be delete: {data_bin_path}")
+            res = input(f"\t=> Do you want to continue? [y/N]")
+            if res.lower().strip() == 'y':
+                print(f"\t=> Deleting directory... ({data_bin_path})")
+                shutil.rmtree(data_bin_path)
+            else:
+                print("\t=> Operation cancelled")
+                print("\t=> Skipping preprocessing as it already exists")
+                return
 
     # Create path (needed only because of the fix separator)
     path = Path(data_bin_path)
@@ -56,7 +60,7 @@ def fairseq_preprocess_with_vocab(data_path, data_bin_path, src_lang, trg_lang, 
     subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {cmd}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
 
 
-def fairseq_train(data_path, run_name, subword_model, vocab_size, force_overwrite, model_path=None, num_gpus=None):
+def fairseq_train(data_path, run_name, subword_model, vocab_size, model_path, num_gpus, force_overwrite, interactive):
     toolkit_path = os.path.join(data_path, "models", "fairseq")
     data_bin_path = os.path.join(toolkit_path, "data-bin", subword_model, str(vocab_size))
     checkpoints_path = os.path.join(toolkit_path, "runs", run_name, "checkpoints")
@@ -69,17 +73,21 @@ def fairseq_train(data_path, run_name, subword_model, vocab_size, force_overwrit
             print("\t=> Removing last checkpoint to train from scratch...")
             os.remove(last_checkpoint_path)
         else:
-            print(f"\t=> There are checkpoints in this experiment: {last_checkpoint_path}")
-            res = input("\t=> Do you want to continue [y/N]? ").strip().lower()
-
-            # Check if we can continue with the training
-            if res.lower().strip() == 'y':
-                print("\t=> Removing last checkpoint to train from scratch...")
-                os.remove(last_checkpoint_path)
-            else:
-                print("\t=> Operation cancelled")
-                print("\t=> Skipping preprocessing as it already exists")
+            if not interactive:
+                print("\t=> Skipping training as it already exists")
                 return
+            else:
+                print(f"\t=> There are checkpoints in this experiment: {last_checkpoint_path}")
+                res = input("\t=> Do you want to continue [y/N]? ").strip().lower()
+
+                # Check if we can continue with the training
+                if res.lower().strip() == 'y':
+                    print("\t=> Removing last checkpoint to train from scratch...")
+                    os.remove(last_checkpoint_path)
+                else:
+                    print("\t=> Operation cancelled")
+                    print("\t=> Skipping training as it already exists")
+                    return
 
     # Write command
     train_command = [f"fairseq-train {data_bin_path}"]
@@ -145,20 +153,24 @@ def fairseq_train(data_path, run_name, subword_model, vocab_size, force_overwrit
 
 
 def fairseq_translate(data_path, checkpoint_path, output_path, src_lang, trg_lang, subword_model, spm_model_path,
-                      force_overwrite, beam_width=5, max_length=200, score=True, metrics=None):
+                      force_overwrite, interactive, beam_width=5, max_length=200, score=True, metrics=None):
     # Check checkpoint path
     if not os.path.exists(checkpoint_path):
         raise IOError("\t=> The checkpoint does not exists")
 
     # Check if there are translations
     if not force_overwrite and os.path.exists(output_path):
-        print(f"\t=> There are translations for this experiment [beam={str(beam_width)}]: {output_path}")
-        res = input("\t=> Do you want to continue [y/N]? ").strip().lower()
-
-        # Check if we can continue with the translation
-        if res.lower().strip() != 'y':
-            print("\t=> Evaluation cancelled.")
+        if not interactive:
+            print("\t=> Skipping evaluation as it already exists")
             return
+        else:
+            print(f"\t=> There are translations for this experiment [beam={str(beam_width)}]: {output_path}")
+            res = input("\t=> Do you want to continue [y/N]? ").strip().lower()
+
+            # Check if we can continue with the translation
+            if res.lower().strip() != 'y':
+                print("\t=> Evaluation cancelled.")
+                return
 
     # Write command
     gen_command = [f"fairseq-generate {data_path}"]
