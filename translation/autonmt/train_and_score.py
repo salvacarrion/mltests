@@ -158,6 +158,38 @@ def evaluate_model(toolkit, base_path, model_ds_path, eval_datasets, run_name, c
                     raise NotImplementedError(f"Unknown toolkit: {toolkit}")
 
 
+def logged_task(row, fn_name, fn, **kwargs):
+    start_fn = time.time()
+    logging.info(f"***** {fn_name.title()} started *****")
+    logging.info(f"----- [{fn_name.title()}] Start time (ss.ms): {start_fn} -----")
+
+    # Call function
+    try:
+        fn_status = "okay"
+        fn(**kwargs)
+    except Exception as e:
+        logging.error(str(e))
+        fn_status = str(e)
+
+    # Get elapsed time
+    end_fn = time.time()
+    elapsed_fn = end_fn - start_fn
+    elapsed_fn_str = time.strftime("%H:%M:%S", time.gmtime(elapsed_fn))
+
+    # Log time
+    logging.info(f"----- [{fn_name.title()}] End time (ss.ms): {end_fn} -----")
+    # logging.info(f"----- [{fn_name.title()}] Time elapsed (ss.ms): {elapsed_fn} -----")
+    logging.info(f"----- [{fn_name.title()}] Time elapsed (hh:mm:ss.ms): {elapsed_fn_str} -----")
+    logging.info(f"***** {fn_name.title()} ended *****")
+
+    # Store results
+    row[f"start_{fn_name}"] = start_fn
+    row[f"end_{fn_name}"] = end_fn
+    row[f"elapsed_{fn_name}"] = elapsed_fn
+    row[f"elapsed_{fn_name}_str"] = elapsed_fn_str
+    row[f"{fn_name}_status"] = fn_status
+
+
 def main():
     # Get base path
     if os.environ.get("LOCAL_GPU"):
@@ -229,74 +261,23 @@ def main():
             row["subword_model"] = str(sw_model)
             row["vocab_size"] = str(voc_size)
 
-            train_eval_status = "okay"
-            try:
-                # Preprocess datasets
-                logging.info(f"***** Preprocessing started *****")
-                start_preprocessing = time.time()
-                row["start_preprocessing"] = start_preprocessing
+            # Preprocessing
+            kwargs = {'toolkit': TOOLKIT, 'base_path': BASE_PATH, 'datasets': TRAIN_DATASETS, 'subword_model': sw_model,
+                      'vocab_size': voc_size, 'force_overwrite': FORCE_OVERWRITE, 'interactive': INTERACTIVE}
+            logged_task(row, "preprocess", preprocess, **kwargs)
 
-                preprocess(toolkit=TOOLKIT, base_path=BASE_PATH, datasets=TRAIN_DATASETS, subword_model=sw_model,
-                           vocab_size=voc_size, force_overwrite=FORCE_OVERWRITE, interactive=INTERACTIVE)
+            # Train model
+            kwargs = {'toolkit': TOOLKIT, 'base_path': BASE_PATH, 'datasets': TRAIN_DATASETS, 'run_name': run_name,
+                      'subword_model': sw_model, 'vocab_size': voc_size, 'num_gpus': NUM_GPUS,
+                      'force_overwrite': FORCE_OVERWRITE, 'interactive': INTERACTIVE}
+            logged_task(row, "train", train, **kwargs)
 
-                end_preprocessing = time.time()
-                row["end_preprocessing"] = end_preprocessing
-                elapsed_preprocessing = end_preprocessing - start_preprocessing
-                elapsed_preprocessing_str = time.strftime("%H:%M:%S", time.gmtime(elapsed_preprocessing))
-                row["elapsed_preprocessing"] = elapsed_preprocessing
-                row["elapsed_preprocessing_str"] = elapsed_preprocessing_str
-                logging.info("----- [Preprocessing] Time elapsed (ss.ms): {} -----".format(elapsed_preprocessing))
-                logging.info("----- [Preprocessing] Time elapsed (hh:mm:ss.ms): {} -----".format(elapsed_preprocessing_str))
-                logging.info(f"***** Preprocessing ended *****")
-
-                # Train model
-                logging.info(f"***** Training started *****")
-                start_training = time.time()
-
-                train(toolkit=TOOLKIT, base_path=BASE_PATH, datasets=TRAIN_DATASETS, run_name=run_name, subword_model=sw_model,
-                      vocab_size=voc_size, num_gpus=NUM_GPUS, force_overwrite=FORCE_OVERWRITE, interactive=INTERACTIVE)
-
-                end_training = time.time()
-                row["end_training"] = end_training
-                elapsed_training = end_training - start_training
-                elapsed_training_str = time.strftime("%H:%M:%S", time.gmtime(elapsed_training))
-                row["elapsed_training"] = elapsed_training
-                row["elapsed_training_str"] = elapsed_training_str
-                logging.info("----- [Training] Time elapsed (ss.ms): {} -----".format(elapsed_training))
-                logging.info("----- [Training] Time elapsed (hh:mm:ss.ms): {} -----".format(elapsed_training_str))
-                logging.info(f"***** Training preprocessing *****")
-            except Exception as e:
-                logging.error(e)
-                train_eval_status = str(e)
-            finally:
-                row["train_score_status"] = train_eval_status
-                logging.info(f"***** Preprocessing/Training ended *****")
-
-            # Evaluate models
-            eval_status = "okay"
-            try:
-                logging.info(f"***** Evaluation started *****")
-                start_evaluate = time.time()
-                row["start_evaluate"] = start_evaluate
-
-                evaluate(toolkit=TOOLKIT, base_path=BASE_PATH, train_datasets=TRAIN_DATASETS,
-                         eval_datasets=EVAL_DATASETS,
-                         run_name=run_name, subword_model=sw_model, vocab_size=voc_size, beams=BEAMS,
-                         metrics=METRICS, force_overwrite=FORCE_OVERWRITE, interactive=INTERACTIVE)
-
-                end_evaluate = time.time()
-                elapsed_evaluate = end_evaluate - start_evaluate
-                elapsed_evaluate_str = time.strftime("%H:%M:%S", time.gmtime(elapsed_evaluate))
-                row["elapsed_evaluate"] = elapsed_evaluate
-                row["elapsed_evaluate_str"] = elapsed_evaluate_str
-                logging.info("----- [Evaluation] Time elapsed (s.ms): {} -----".format(elapsed_evaluate))
-                logging.info("----- [Evaluation] Time elapsed (hh:mm:ss.ms): {} -----".format(elapsed_evaluate_str))
-            except Exception as e:
-                logging.error(e)
-                eval_status = str(e)
-            finally:
-                row["evaluation_status"] = eval_status
-                logging.info(f"***** Evaluation ended *****")
+            # Evaluate model
+            kwargs = {'toolkit': TOOLKIT, 'base_path': BASE_PATH, 'train_datasets': TRAIN_DATASETS,
+                      'eval_datasets': EVAL_DATASETS,
+                      'run_name': run_name, 'subword_model': sw_model, 'vocab_size': voc_size, 'beams': BEAMS,
+                      'metrics': METRICS, 'force_overwrite': FORCE_OVERWRITE, 'interactive': INTERACTIVE}
+            logged_task(row, "evaluate", evaluate, **kwargs)
 
             # Add row to rows
             row["run_end_time"] = str(datetime.datetime.now())
@@ -308,6 +289,7 @@ def main():
                 path = Path(LOGS_PATH, "runs")
                 path.mkdir(parents=True, exist_ok=True)
 
+                # Save json
                 utils.save_json(row, os.path.join(path, f"{str(runs_counter)}__{run_name}__{str(datetime.datetime.now())}.json"))
             except Exception as e:
                 logging.error(e)
