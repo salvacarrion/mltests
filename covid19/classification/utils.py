@@ -1,7 +1,5 @@
 import os
 
-import tensorflow as tf
-
 import matplotlib.pyplot as plt
 from matplotlib import ticker
 
@@ -57,7 +55,7 @@ def plot_hist(history, title="", savepath=None, suffix="", show_plot=True):
         fig, ax = plt.subplots(1, 1, figsize=(13, 8))
 
         # Plot
-        x = range(1, len(history.history[m])+1)
+        x = range(1, len(history.history[m]) + 1)
         ax.plot(x, history.history[m])
 
         val_metric = f"val_{m}"

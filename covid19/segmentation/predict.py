@@ -1,15 +1,12 @@
-import tensorflow as tf
-
 import segmentation_models as sm
+import tensorflow as tf
+from PIL import Image
 from segmentation_models.losses import bce_jaccard_loss
 from segmentation_models.metrics import iou_score
-
 from tqdm import tqdm
 
-from PIL import Image
-
-from covid19.segmentation.utils import *
 from covid19.segmentation.dataset import DatasetImages, DataloaderImages
+from covid19.segmentation.utils import *
 
 # Fix sm
 sm.set_framework('tf.keras')
@@ -19,7 +16,7 @@ sm.framework()
 def predict(pred_dataset, output_path, model_path, batch_size, use_multiprocessing, workers, save_overlay=True):
     # Build dataloader
     predict_dataloader = DataloaderImages(pred_dataset, batch_size=batch_size, shuffle=False)
-    
+
     # Load model
     print("Loading model...")
     model = tf.keras.models.load_model(filepath=model_path, compile=False)
@@ -37,7 +34,7 @@ def predict(pred_dataset, output_path, model_path, batch_size, use_multiprocessi
         for img_id, img, img_pred in zip(img_ids, batch, pred):
             # From 0-1 to 0-255
             img255 = (img.squeeze()).astype(np.uint8)
-            pred_img255 = ((img_pred.squeeze() > 0.5)*255).astype(np.uint8)
+            pred_img255 = ((img_pred.squeeze() > 0.5) * 255).astype(np.uint8)
 
             # Convert to PIL
             pil_img = Image.fromarray(img255)
@@ -127,13 +124,13 @@ def main(model_path, batch_size=32, backbone="resnet34", base_path=".",
 
     # Get data
     predict_dataset = get_pred_dataset(filenames=images_with_nomask, images_dir=images_dir,
-                                   backbone=backbone, target_size=target_size)
+                                       backbone=backbone, target_size=target_size)
 
     # Predict images
     predict(predict_dataset, output_path=pred_masks_dir, model_path=model_path, batch_size=batch_size,
             use_multiprocessing=use_multiprocessing, workers=workers)
-    
-    
+
+
 if __name__ == "__main__":
     BASE_PATH = "/home/scarrion/datasets/covid19/front"
     MODEL_PATH = os.path.join("/home/scarrion/projects/mltests/covid19/code/.outputs/models/", "unet_resnet34.h5")
@@ -142,4 +139,3 @@ if __name__ == "__main__":
     # Run
     main(model_path=MODEL_PATH, backbone=BACKBONE, base_path=BASE_PATH)
     print("Done!")
-

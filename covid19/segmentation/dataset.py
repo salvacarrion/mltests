@@ -1,11 +1,9 @@
-import os
 import math
+import os
 
-import tensorflow as tf
-from tensorflow import keras
-
-from PIL import Image
 import numpy as np
+from PIL import Image
+from tensorflow import keras
 
 
 # classes for data loading and preprocessing
@@ -76,7 +74,7 @@ class DatasetMasks:
             image, mask = sample['image'], sample['mask']
 
         # Convert images
-        image = np.stack((image,)*3, axis=-1)  # Grayscale to RGB
+        image = np.stack((image,) * 3, axis=-1)  # Grayscale to RGB
         mask = mask.astype(np.bool).astype(np.float32)
 
         # Check shapes

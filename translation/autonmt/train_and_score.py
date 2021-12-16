@@ -1,15 +1,15 @@
 import datetime
-import os
-import time
 import logging
+import os
 import random
+import time
 from pathlib import Path
 
 import pandas as pd
 
 from translation import utils
-from translation.autonmt.toolkits import fairseq_entry
 from translation.autonmt import commands
+from translation.autonmt.toolkits import fairseq_entry
 
 # Global vars
 random.seed(123)

@@ -5,17 +5,21 @@ import tensorflow as tf
 def BinaryAccuracy_Infiltrates(y_true, y_pred, i=0):
     return tf.keras.metrics.binary_accuracy(y_true[:, i], y_pred[:, i])
 
+
 @tf.function
 def BinaryAccuracy_Pneumonia(y_true, y_pred, i=1):
     return tf.keras.metrics.binary_accuracy(y_true[:, i], y_pred[:, i])
+
 
 @tf.function
 def BinaryAccuracy_Covid19(y_true, y_pred, i=2):
     return tf.keras.metrics.binary_accuracy(y_true[:, i], y_pred[:, i])
 
+
 @tf.function
 def BinaryAccuracy_Normal(y_true, y_pred, i=3):
     return tf.keras.metrics.binary_accuracy(y_true[:, i], y_pred[:, i])
+
 
 class CustomModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):
 
@@ -25,11 +29,11 @@ class CustomModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):
 
     def on_epoch_end(self, epoch, logs=None):
         if self.wait_epoch_warmup:
-            if (epoch+1) >= self.wait_epoch_warmup:
+            if (epoch + 1) >= self.wait_epoch_warmup:
                 super().on_epoch_end(epoch, logs)
             else:
                 self.epochs_since_last_save += 1
-                print(f"Skipping save model (wait_epoch_warmup={self.wait_epoch_warmup-(epoch+1)})")
+                print(f"Skipping save model (wait_epoch_warmup={self.wait_epoch_warmup - (epoch + 1)})")
         else:
             super().on_epoch_end(epoch, logs)
 
@@ -145,6 +149,7 @@ def add_tabular_input(model, classes):
 
     return model
 
+
 def unfreeze_base_model(model, n=None, unfreeze=True):
     base_model = model.layers[1].layers
 
@@ -153,9 +158,9 @@ def unfreeze_base_model(model, n=None, unfreeze=True):
     if n is not None:
         if isinstance(n, int):
             idx = n
-            print(f"Unfreezing {len(base_model)-idx} layers")
+            print(f"Unfreezing {len(base_model) - idx} layers")
         elif isinstance(n, float) and 0.0 < n <= 1.0:
-            idx = int(len(base_model)*n)
+            idx = int(len(base_model) * n)
             print(f"Unfreezing {idx} layers")
         else:
             raise ValueError("Invalid number of layers")

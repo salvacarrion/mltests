@@ -1,16 +1,9 @@
-import glob
-import os
-
-import cv2
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-
 import albumentations as A
+import cv2
 
 
 def _da_negative(image, **kwargs):
-    return 255-image
+    return 255 - image
 
 
 # define heavy augmentations
@@ -70,7 +63,8 @@ def offline_da_fn(height, width, augment=True):
     if augment:
         da_transform += [
             # A.HorizontalFlip(p=0.5),
-            A.ShiftScaleRotate(scale_limit=0.05, rotate_limit=7, shift_limit=0.05, border_mode=cv2.BORDER_CONSTANT, p=1.0),
+            A.ShiftScaleRotate(scale_limit=0.05, rotate_limit=7, shift_limit=0.05, border_mode=cv2.BORDER_CONSTANT,
+                               p=1.0),
             A.Perspective(scale=(0.015, 0.025), p=0.3),
             A.RandomResizedCrop(height=height, width=width, scale=(0.95, 1.0), p=0.3),
 

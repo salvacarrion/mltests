@@ -1,13 +1,12 @@
 import glob
 import os
-import pandas as pd
-import numpy as np
-import tqdm
 
-from PIL import Image
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
+import numpy as np
+import pandas as pd
 import seaborn as sns
+import tqdm
+from PIL import Image
+
 sns.set()
 
 from covid19.classification.da import offline_da_fn
@@ -30,7 +29,7 @@ def process_splits(repeats, image_size):
     splits = [(df_train, "train"), (df_val, "val"), (df_test, "test")]
 
     # Print total augmentations
-    total_augmentations = (len(df_train)+len(df_val)+len(df_test))*repeats
+    total_augmentations = (len(df_train) + len(df_val) + len(df_test)) * repeats
     print(f"Total augmentation: {total_augmentations}")
 
     # Walk through splits
@@ -57,7 +56,7 @@ def process_splits(repeats, image_size):
                 ori_image = np.array(Image.open(img_path))
                 # if j == 0 and i <= 5:  # Preview (debugging)
                 #     Image.fromarray(ori_image).show()
-                if j==0:
+                if j == 0:
                     sample = da_fn_noaugment(image=ori_image)
                 else:
                     # Perform augmentation

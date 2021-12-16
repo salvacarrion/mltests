@@ -2,7 +2,6 @@
 
 Deep learning and stuff
 
-
 ## Installation
 
 **Main environment:**
@@ -44,7 +43,6 @@ git pull
 ```
 
 ## Layout for NLP tasks
-
 
 ```text
 - dataset/ => name/domain*/version*

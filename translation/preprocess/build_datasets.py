@@ -1,13 +1,12 @@
 import os
-from pathlib import Path
-from itertools import islice
-from collections import defaultdict
 import random
-
-import pandas as pd
-import tqdm
+from collections import defaultdict
+from itertools import islice
+from pathlib import Path
 
 import numpy as np
+import pandas as pd
+import tqdm
 
 random.seed(123)
 
@@ -191,7 +190,7 @@ def build_vocab(base_path, datasets, encoding_mode, subword_model, vocab_size, c
                 else:
                     # Concat training sets
                     train_concat_fname = "train_pretok.txt" if (
-                                encoding_mode == "pretokenized" or subword_model == "word") else "train_raw.txt"
+                            encoding_mode == "pretokenized" or subword_model == "word") else "train_raw.txt"
                     new_filename = os.path.join(vocab_data_path, train_concat_fname)
 
                     # Check if concatenated train file exists
@@ -203,7 +202,7 @@ def build_vocab(base_path, datasets, encoding_mode, subword_model, vocab_size, c
                         with open(new_filename, 'w') as outfile:
                             for trans_fname in [f"train.{src_lang}", f"train.{trg_lang}"]:
                                 raw_folder = "pretokenized" if (
-                                            encoding_mode == "pretokenized" or subword_model == "word") else "splits"
+                                        encoding_mode == "pretokenized" or subword_model == "word") else "splits"
                                 ori_filename = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data",
                                                             raw_folder, trans_fname)
                                 with open(ori_filename) as infile:
@@ -250,7 +249,7 @@ def encode_datasets(base_path, datasets, encoding_mode, subword_model, vocab_siz
                 new_filename_dir = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data", "encoded",
                                                 subword_model, str(vocab_size))
                 raw_folder = "pretokenized" if (
-                            encoding_mode == "pretokenized" or subword_model == "word") else "splits"
+                        encoding_mode == "pretokenized" or subword_model == "word") else "splits"
                 for fname in trans_files:
                     ori_filename = os.path.join(base_path, ds_name, ds_size_name, lang_pair, "data", raw_folder, fname)
                     new_filename = os.path.join(new_filename_dir, fname)

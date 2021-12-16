@@ -1,12 +1,12 @@
-import os
 import glob
+import os
 from pathlib import Path
+
+import cv2
 import numpy as np
 import pandas as pd
 import tqdm
-
 from matplotlib import pyplot as plt
-import cv2
 
 
 def read_img(filename):
@@ -42,13 +42,13 @@ def get_bounding_boxes(img, threshold_area=1, scaling=1.0):
     ctrs = cleaned_ctrs
     for ctr in ctrs:
         x, y, w, h = cv2.boundingRect(ctr)
-        values = [v/scaling for v in [x, y, w, h]]
+        values = [v / scaling for v in [x, y, w, h]]
         bboxes.append(values)
 
     # Concat bboxes
     ctrs = np.concatenate(ctrs)
     x, y, w, h = cv2.boundingRect(ctrs)
-    concat_bboxes = [[v/scaling for v in [x, y, w, h]]]
+    concat_bboxes = [[v / scaling for v in [x, y, w, h]]]
 
     return bboxes, concat_bboxes
 
@@ -59,8 +59,8 @@ def draw_bounding_boxes(img, boxes, scaling=1.0):
 
     # Draw bounding boxes
     for box in boxes:
-        top_left = (int(box[0]*scaling), int(box[1]*scaling))
-        bottom_right = (int(box[0]*scaling + box[2]*scaling), int(box[1]*scaling + box[3]*scaling))
+        top_left = (int(box[0] * scaling), int(box[1] * scaling))
+        bottom_right = (int(box[0] * scaling + box[2] * scaling), int(box[1] * scaling + box[3] * scaling))
         cv2.rectangle(new_img, top_left, bottom_right, (0, 255, 0), 2)
 
     return new_img
@@ -68,9 +68,9 @@ def draw_bounding_boxes(img, boxes, scaling=1.0):
 
 def get_all_masks_files(masks_dir, pred_masks_dir):
     masks_files = [file for file in
-                 glob.glob(os.path.join(masks_dir, "*.png"))]
+                   glob.glob(os.path.join(masks_dir, "*.png"))]
     pred_masks_files = [file for file in
-                  glob.glob(os.path.join(pred_masks_dir, "*.png"))]
+                        glob.glob(os.path.join(pred_masks_dir, "*.png"))]
     return masks_files, pred_masks_files
 
 

@@ -1,5 +1,6 @@
 import os
 import random
+
 import pandas as pd
 
 BASE_PATH = "/home/scarrion/datasets/covid19/lateral"
@@ -24,7 +25,8 @@ while True:
     random.shuffle(rnd_ids)
 
     # Split subjects
-    ssize_tr, ssize_val, ssize_ts = int(SPLIT[0] * len(subjects)), int(SPLIT[1] * len(subjects)), int(SPLIT[2] * len(subjects))
+    ssize_tr, ssize_val, ssize_ts = int(SPLIT[0] * len(subjects)), int(SPLIT[1] * len(subjects)), int(
+        SPLIT[2] * len(subjects))
     tr_ids, val_ids, ts_ids = rnd_ids[:ssize_tr], rnd_ids[ssize_tr:-ssize_ts], rnd_ids[-ssize_ts:]
 
     # Create partitions

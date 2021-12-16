@@ -1,7 +1,8 @@
 import os
+
+import onnx
 import tensorflow as tf
 import tf2onnx
-import onnx
 
 
 def convert2onnx(model_path, savepath="model.onnx", input_size=(1, 256, 256, 3)):

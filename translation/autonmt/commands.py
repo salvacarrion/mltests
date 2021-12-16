@@ -1,7 +1,7 @@
 import os
-from pathlib import Path
-import subprocess
 import random
+import subprocess
+from pathlib import Path
 
 random.seed(123)
 

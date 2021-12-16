@@ -1,12 +1,10 @@
 import glob
 import os
 
-import cv2
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-
 import albumentations as A
+import cv2
+import matplotlib.pyplot as plt
+import pandas as pd
 
 
 def get_splits(filename, filter_masks=True, masks_path=None, splits=(0.8, 0.1, 0.1)):
@@ -56,7 +54,7 @@ def plot_4x4(image, mask, original_image=None, original_mask=None):
 
 
 def da_negative(image, **kwargs):
-    return 255-image
+    return 255 - image
 
 
 # define heavy augmentations

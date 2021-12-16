@@ -1,15 +1,14 @@
 from pathlib import Path
 
-import tensorflow as tf
-from tensorflow.keras.optimizers import SGD, Adam
-
 import segmentation_models as sm
-from segmentation_models.utils import set_trainable
+import tensorflow as tf
 from segmentation_models.losses import bce_jaccard_loss
 from segmentation_models.metrics import iou_score
+from segmentation_models.utils import set_trainable
+from tensorflow.keras.optimizers import SGD, Adam
 
-from covid19.segmentation.utils import *
 from covid19.segmentation.dataset import DatasetMasks, DataloaderMasks
+from covid19.segmentation.utils import *
 
 # Fix sm
 sm.set_framework('tf.keras')
@@ -35,7 +34,7 @@ def train(model, train_dataset, val_dataset, batch_size, epochs1, epochs2,
     # Build dataloaders
     train_dataloader = DataloaderMasks(train_dataset, batch_size=batch_size, shuffle=True)
     val_dataloader = DataloaderMasks(val_dataset, batch_size=batch_size, shuffle=False)
-    
+
     # Callbacks
     model_callbacks = [
         tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=1e-5),
@@ -47,10 +46,10 @@ def train(model, train_dataset, val_dataset, batch_size, epochs1, epochs2,
 
     # define model
     model.summary()
-    
+
     # Compile the model
     model.compile(optimizer=Adam(learning_rate=1e-3), loss=bce_jaccard_loss, metrics=[iou_score])
-    
+
     # train the model on the new data for a few epochs
     print("Training decoder first...")
     history1 = model.fit(train_dataloader, validation_data=val_dataloader, epochs=epochs1, callbacks=model_callbacks,
@@ -59,13 +58,13 @@ def train(model, train_dataset, val_dataset, batch_size, epochs1, epochs2,
     print(history1)
     if plots_path:
         plot_hist(history1, title="Training decoder", savepath=plots_path, suffix="_initial")
-    
+
     # we need to recompile the model for these modifications to take effect
     # we use SGD with a low learning rate
     print("Fine-tuning model...")
     set_trainable(model, recompile=False)
     model.compile(optimizer=SGD(learning_rate=1e-4, momentum=0.9), loss=bce_jaccard_loss, metrics=[iou_score])
-    
+
     # we train our model again (this time fine-tuning the top 2 inception blocks
     # alongside the top Dense layers
     history2 = model.fit(train_dataloader, validation_data=val_dataloader, epochs=epochs2, callbacks=model_callbacks,
@@ -74,7 +73,7 @@ def train(model, train_dataset, val_dataset, batch_size, epochs1, epochs2,
     print(history2)
     if plots_path:
         plot_hist(history2, title="Fine-tuning full model", savepath=plots_path, suffix="_finetuning")
-    
+
     # Save model
     if last_checkpoint_path:
         print("Saving last model...")
@@ -85,7 +84,7 @@ def train(model, train_dataset, val_dataset, batch_size, epochs1, epochs2,
 def test(test_dataset, model_path, batch_size):
     # Build dataloader
     test_dataloader = DataloaderMasks(test_dataset, batch_size=batch_size, shuffle=False)
-    
+
     # Load model
     print("Loading model...")
     model = tf.keras.models.load_model(filepath=model_path, compile=False)
@@ -100,7 +99,7 @@ def test(test_dataset, model_path, batch_size):
     print("Evaluation results")
     print(scores)
     return scores
-    
+
 
 def get_datasets(filename, images_dir, masks_dir, target_size, prep_fn=None):
     # Get data
@@ -109,16 +108,16 @@ def get_datasets(filename, images_dir, masks_dir, target_size, prep_fn=None):
 
     # Build dataset
     train_dataset = DatasetMasks(df_train, imgs_dir=images_dir, masks_dir=masks_dir, da_fn=tr_da_fn(*target_size),
-                            preprocess_fn=prep_fn, target_size=target_size)
+                                 preprocess_fn=prep_fn, target_size=target_size)
     val_dataset = DatasetMasks(df_val, imgs_dir=images_dir, masks_dir=masks_dir, da_fn=ts_da_fn(*target_size),
-                          preprocess_fn=prep_fn, target_size=target_size)
+                               preprocess_fn=prep_fn, target_size=target_size)
     test_dataset = DatasetMasks(df_test, imgs_dir=images_dir, masks_dir=masks_dir, da_fn=ts_da_fn(*target_size),
-                           preprocess_fn=prep_fn, target_size=target_size)
-    
+                                preprocess_fn=prep_fn, target_size=target_size)
+
     return train_dataset, val_dataset, test_dataset
 
 
-def visualize(dataset, i, n=5): 
+def visualize(dataset, i, n=5):
     for _ in range(n):
         image, mask, original_image, original_mask = dataset.__getitem__(i, show_originals=True)
         plot_4x4(
@@ -139,7 +138,7 @@ def main(batch_size=32, backbone="resnet34", epochs1=100, epochs2=200, base_path
 
     # Outputs
     checkpoints_path = os.path.join(output_path, RUN_NAME, "models")
-    last_checkpoint_path = None  #os.path.join(checkpoints_path, "last_model.h5")
+    last_checkpoint_path = None  # os.path.join(checkpoints_path, "last_model.h5")
     logs_path = os.path.join(output_path, RUN_NAME, "logs")
     plots_path = os.path.join(output_path, RUN_NAME, "plots")
 
@@ -168,8 +167,8 @@ def main(batch_size=32, backbone="resnet34", epochs1=100, epochs2=200, base_path
     # Evaluate
     if test_model:
         test(test_dataset, model_path=last_checkpoint_path, batch_size=batch_size)
-    
-    
+
+
 if __name__ == "__main__":
     BASE_PATH = "/home/scarrion/datasets/covid19/front"
     OUTPUT_PATH = "/home/scarrion/projects/mltests/covid19/code/segmentation/.outputs"
@@ -177,4 +176,3 @@ if __name__ == "__main__":
     # Run
     main(train_model=True, test_model=True, show_samples=False, base_path=BASE_PATH, output_path=OUTPUT_PATH)
     print("Done!")
-

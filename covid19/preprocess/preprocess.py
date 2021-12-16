@@ -1,10 +1,7 @@
-import os
-import numpy as np
-import pandas as pd
 import collections
+import os
 
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
+import pandas as pd
 
 BASE_PATH = "/home/scarrion/datasets/covid19/all-covid"
 df = pd.read_csv(os.path.join(BASE_PATH, "ecvl_bimcv_covid19.tsv"), delimiter='\t')
@@ -19,7 +16,7 @@ total_rows1 = len(df)
 duplicate_names = {item for item, count in collections.Counter(df["filepath"].tolist()).items() if count > 1}
 df.drop_duplicates(subset="filepath", keep=False, inplace=True)
 total_rows2 = len(df)
-print(f"Duplicates: {total_rows1-total_rows2}")
+print(f"Duplicates: {total_rows1 - total_rows2}")
 
 # Remove lines without image
 total_rows1 = len(df)
@@ -37,7 +34,7 @@ for i, row in df.iterrows():
     else:
         df.drop(i, inplace=True)
 total_rows2 = len(df)
-print(f"Images not found: {total_rows1-total_rows2}")
+print(f"Images not found: {total_rows1 - total_rows2}")
 
 # Shuffle
 df = df.sample(frac=1, random_state=1234)
@@ -47,7 +44,7 @@ df_train = df[df.split == "training"]
 df_val = df[df.split == "validation"]
 df_test = df[df.split == "test"]
 
-print(f"Partitions: {len(df_train)+len(df_val)+len(df_test)}")
+print(f"Partitions: {len(df_train) + len(df_val) + len(df_test)}")
 print(f"- Training: {len(df_train)}")
 print(f"\t- Infiltrates: {len(df_train[df_train['infiltrates'] == 1])}")
 print(f"\t- No Infiltrates: {len(df_train[df_train['infiltrates'] == 0])}")

@@ -1,6 +1,6 @@
-import re
 import json
 import random
+import re
 from collections import defaultdict
 
 random.seed(123)

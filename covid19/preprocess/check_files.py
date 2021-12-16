@@ -1,19 +1,20 @@
 import glob
 import os
-import pandas as pd
-import numpy as np
 
-from PIL import Image
 import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
+import numpy as np
 import seaborn as sns
+from PIL import Image
+
 sns.set()
 
 BASE_PATH = "/home/scarrion/datasets/covid19/all-covid"
 
 # Check if all masks match an images
-img_files = [os.path.splitext(os.path.split(file)[1])[0] for file in glob.glob(os.path.join(BASE_PATH, "images256", "*.png"))]
-mask_files = [os.path.splitext(os.path.split(file)[1])[0] for file in glob.glob(os.path.join(BASE_PATH, "masks256", "*.png"))]
+img_files = [os.path.splitext(os.path.split(file)[1])[0] for file in
+             glob.glob(os.path.join(BASE_PATH, "images256", "*.png"))]
+mask_files = [os.path.splitext(os.path.split(file)[1])[0] for file in
+              glob.glob(os.path.join(BASE_PATH, "masks256", "*.png"))]
 
 print("Summary:")
 print(f"\t- Total images: {len(img_files)}")
@@ -43,6 +44,7 @@ def plot_segmentation(img, mask, file_name=""):
     plt.tight_layout()
     plt.show()
     asd = 3
+
 
 # Preview images
 preview = 4

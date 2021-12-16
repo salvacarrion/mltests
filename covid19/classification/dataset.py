@@ -1,11 +1,10 @@
-import os
 import math
+import os
 
-import tensorflow as tf
-from tensorflow import keras
-
-from PIL import Image
 import numpy as np
+import tensorflow as tf
+from PIL import Image
+from tensorflow import keras
 
 
 class Dataset:
