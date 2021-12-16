@@ -446,8 +446,8 @@ if __name__ == "__main__":
     else:
         BASE_PATH = "/home/scarrion/datasets/nn/translation"
 
-    ENCODING_MODE = "encoded"  # splits (raw), encoded (spm), [pretokenized (moses) => Force moses tokenization for everything]
-    SUBWORD_MODELS = ["char"]  # unigram, bpe, char, or word
+    # Variables
+    SUBWORD_MODELS = ["word", "unigram", "char"]  # unigram, bpe, char, or word
     VOCAB_SIZE = [16000]
     MIN_VOCAB_FREQUENCY = 1  # Doesn't work
     MAKE_PLOTS = True
@@ -467,6 +467,9 @@ if __name__ == "__main__":
         # {"name": "scielo/health", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en", "pt-en"]},
         # {"name": "scielo/biological", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en", "pt-en"]},
     ]
+
+    # To deprecate?
+    ENCODING_MODE = "encoded"  # splits (raw), encoded (spm), [pretokenized (moses) => Force moses tokenization for everything]
 
     # Create datasets
     main(base_path=BASE_PATH, datasets=DATASETS, encoding_mode=ENCODING_MODE, subword_models=SUBWORD_MODELS,

@@ -49,7 +49,7 @@ def train(toolkit, base_path, datasets, run_name, subword_model, vocab_size, for
                     raise NotImplementedError(f"Unknown toolkit: {toolkit}")
 
 
-def evaluate(toolkit, base_path, train_datasets, eval_datasets, run_name, subword_model, vocab_size, beams, force_overwrite):
+def evaluate(toolkit, base_path, train_datasets, eval_datasets, run_name, subword_model, vocab_size, beams, metrics, force_overwrite):
     # Run name
     print(f"- Evaluate models: (run_name={run_name}, subword_model={subword_model}; vocab_size={vocab_size})")
 
@@ -69,11 +69,12 @@ def evaluate(toolkit, base_path, train_datasets, eval_datasets, run_name, subwor
                     evaluate_model(toolkit=toolkit, base_path=base_path, model_ds_path=model_ds_path,
                                    eval_datasets=eval_datasets, run_name=run_name,
                                    checkpoint_path=checkpoint_path, spm_model_path=spm_model_path, beams=beams,
-                                   subword_model=subword_model, vocab_size=vocab_size, force_overwrite=force_overwrite)
+                                   subword_model=subword_model, vocab_size=vocab_size, metrics=metrics,
+                                   force_overwrite=force_overwrite)
 
 
 def evaluate_model(toolkit, base_path, model_ds_path, eval_datasets, run_name, checkpoint_path, spm_model_path, beams,
-                   subword_model, vocab_size, force_overwrite):
+                   subword_model, vocab_size, metrics, force_overwrite):
     # model_ds_path => Dataset path where the trained model is
 
     print(f"- Evaluate model: (run_name= {run_name}, checkpoint_path={checkpoint_path}, beams={str(beams)}])")
@@ -122,7 +123,10 @@ def evaluate_model(toolkit, base_path, model_ds_path, eval_datasets, run_name, c
                     eval_data_bin_path = os.path.join(eval_path, "data-bin")
 
                     # Process raw evaluation files
-                    fairseq_entry.fairseq_preprocess_with_vocab(data_path=eval_data_path, data_bin_path=eval_data_bin_path, src_lang=src_lang, trg_lang=trg_lang, src_vocab_path=src_vocab_path, trg_vocab_path=trg_vocab_path, train_fname="test", val_fname=None)
+                    if not force_overwrite and os.path.exists(eval_data_bin_path):
+                        print("=> Skipping preprocessing as the directory already exists")
+                    else:
+                        fairseq_entry.fairseq_preprocess_with_vocab(data_path=eval_data_path, data_bin_path=eval_data_bin_path, src_lang=src_lang, trg_lang=trg_lang, src_vocab_path=src_vocab_path, trg_vocab_path=trg_vocab_path, train_fname="test", val_fname=None)
 
                     for beam_width in beams:
                         # Create output path (if needed)
@@ -130,14 +134,13 @@ def evaluate_model(toolkit, base_path, model_ds_path, eval_datasets, run_name, c
                         path = Path(beam_output_path)
                         path.mkdir(parents=True, exist_ok=True)
 
-                        # Translate
+                        # Translate & Score
                         fairseq_entry.fairseq_translate(data_path=eval_data_bin_path, checkpoint_path=checkpoint_path,
                                                         output_path=beam_output_path, src_lang=src_lang, trg_lang=trg_lang,
                                                         subword_model=subword_model, spm_model_path=spm_model_path,
-                                                        force_overwrite=force_overwrite, beam_width=beam_width)
+                                                        force_overwrite=force_overwrite, beam_width=beam_width,
+                                                        score=True, metrics=metrics)
 
-                        # Score
-                        commands.score_test_files(data_path=beam_output_path, src_lang=src_lang, trg_lang=trg_lang, force_overwrite=force_overwrite)
                 else:
                     raise NotImplementedError(f"Unknown toolkit: {toolkit}")
 
@@ -149,15 +152,17 @@ if __name__ == "__main__":
     else:
         BASE_PATH = "/home/scarrion/datasets/nn/translation"
 
-    ENCODING_MODE = "pretokenized"  # splits (raw), pretokenized (moses), encoded (spm)
-    SUBWORD_MODELS = ["word"]  # unigram, bpe, char, or word
+    # Variables
+    SUBWORD_MODELS = ["word", "unigram", "char"]  # unigram, bpe, char, or word
     VOCAB_SIZE = [16000]
     BEAMS = [1, 5]
     NUM_GPUS = None  # None=default; 1=[0]; 2=[0,1];...
     FORCE_OVERWRITE = True
     TOOLKIT = "fairseq"
     RUN_NAME = "mymodel"
+    METRICS = {"bleu", "chrf", "ter", "bertscore", "comet"}
 
+    # Datasets
     TRAIN_DATASETS = [
         {"name": "multi30k", "sizes": [("original", None)], "languages": ["de-en"]},
         # {"name": "ccaligned", "sizes": [("original", None)], "languages": ["ti-en"]},
@@ -171,11 +176,11 @@ if __name__ == "__main__":
         # {"name": "scielo/biological", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en", "pt-en"]},
     ]
 
-    EVAL_DATASETS = TRAIN_DATASETS
-
-    # EVAL_DATASETS = [
-    #     {"name": "multi30k", "sizes": [("original", None)], "languages": ["de-en"]},
-    # ]
+    # EVAL_DATASETS = TRAIN_DATASETS
+    EVAL_DATASETS = [
+        {"name": "multi30k", "sizes": [("original", None)], "languages": ["de-en"]},
+        {"name": "iwlst16", "sizes": [("original", None)], "languages": ["de-en"]},
+    ]
 
     for sw_model in SUBWORD_MODELS:
         for voc_size in VOCAB_SIZE:
@@ -187,10 +192,10 @@ if __name__ == "__main__":
 
             # Train model
             train(toolkit=TOOLKIT, base_path=BASE_PATH, datasets=TRAIN_DATASETS, run_name=run_name, subword_model=sw_model,
-                  vocab_size=voc_size, force_overwrite=True, num_gpus=NUM_GPUS)
+                  vocab_size=voc_size, force_overwrite=FORCE_OVERWRITE, num_gpus=NUM_GPUS)
 
             # Evaluate models
             evaluate(toolkit=TOOLKIT, base_path=BASE_PATH, train_datasets=TRAIN_DATASETS, eval_datasets=EVAL_DATASETS,
                      run_name=run_name, subword_model=sw_model, vocab_size=voc_size, beams=BEAMS,
-                     force_overwrite=True)
+                     metrics=METRICS, force_overwrite=FORCE_OVERWRITE)
     print("Done!")

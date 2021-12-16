@@ -7,7 +7,18 @@ random.seed(123)
 CONDA_ENVNAME = "mltests"
 
 
-def score_test_files(data_path, src_lang, trg_lang, force_overwrite=True, bleu=True, chrf=False, ter=False, bertscore=False, comet=False):
+def score_test_files(data_path, trg_lang, metrics=None, src_lang=None, force_overwrite=True):
+    if metrics is None:
+        metrics = {'bleu'}  # {"bleu", "chrf", "ter", "bertscore", "comet"}
+
+    # Check supported metrics
+    metrics_diff = metrics.difference({"bleu", "chrf", "ter", "bertscore", "comet"})
+    if metrics_diff:
+        print(f"[WARNING] These metrics are not supported: {str(metrics_diff)}")
+        if metrics == metrics_diff:
+            print(f"- Skipping evaluation. No valid metrics were found")
+            return
+
     # Create path (if needed)
     score_path = os.path.join(data_path, "scores")
     path = Path(score_path)
@@ -19,26 +30,26 @@ def score_test_files(data_path, src_lang, trg_lang, force_overwrite=True, bleu=T
     hyp_file_path = os.path.join(data_path, "hyp.txt")
 
     # Sacrebleu
-    metrics = ""
-    metrics += "bleu " if bleu else ""
-    metrics += "chrf " if chrf else ""
-    metrics += "ter " if ter else ""
-    if metrics:
-        print(f"=> Scoring with Sacrebleu...")
+    sb_m = ""
+    sb_m += "bleu " if "bleu" in metrics else ""
+    sb_m += "chrf " if "chrf" in metrics else ""
+    sb_m += "ter " if "ter" in metrics else ""
+    if sb_m:
+        print(f"\t=> Sacrebleu scoring...")
         sacrebleu_scores_path = os.path.join(score_path, "sacrebleu_scores.json")
-        cmd = f"sacrebleu {ref_file_path} -i {hyp_file_path} -m {metrics} -w 5 > {sacrebleu_scores_path}"  # bleu chrf ter
+        cmd = f"sacrebleu {ref_file_path} -i {hyp_file_path} -m {sb_m} -w 5 > {sacrebleu_scores_path}"  # bleu chrf ter
         subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {cmd}"])
 
     # BertScore
-    if bertscore:
-        print(f"=> Scoring with BertScore...")
+    if 'bertscore' in metrics:
+        print(f"\t=> BertScore scoring...")
         bertscore_scores_path = os.path.join(score_path, "bert_scores.txt")
         cmd = f"bert-score -r {ref_file_path} -c {hyp_file_path} --lang {trg_lang} > {bertscore_scores_path}"
         subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {cmd}"])
 
     # Comet
-    if comet:
-        print(f"=> Scoring with Comet...")
+    if 'comet' in metrics:
+        print(f"\t=> Comet scoring...")
         comet_scores_path = os.path.join(score_path, "comet_scores.txt")
         cmd = f"comet-score -s {src_file_path} -t {hyp_file_path} -r {ref_file_path} > {comet_scores_path}"
         subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {cmd}"])
