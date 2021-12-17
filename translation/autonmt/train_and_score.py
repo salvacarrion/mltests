@@ -201,8 +201,8 @@ def logged_task(row, fn_name, fn, **kwargs):
     row[f"{fn_name}_status"] = fn_status
 
 
-def main(base_path, train_datasets, eval_datasets, run_name, subword_models, vocab_size, force_overwrite, interactive,
-         toolkit, num_gpus, beams, metrics, logs_path="logs"):
+def train_and_score(base_path, train_datasets, eval_datasets, run_name, subword_models, vocab_size, force_overwrite,
+                    interactive, toolkit, num_gpus, beams, metrics, logs_path="logs"):
     # Setup logger
     Path(logs_path).mkdir(parents=True, exist_ok=True)
     logging.basicConfig(filename=os.path.join(logs_path, 'logger.log'), filemode='w',
@@ -294,17 +294,17 @@ if __name__ == "__main__":
         BASE_PATH = "/home/scarrion/datasets/nn/translation"
 
     # Variables
-    SUBWORD_MODELS = ["word"]  # unigram, bpe, char, or word
+    SUBWORD_MODELS = ["word"]
     VOCAB_SIZE = [16000]
-    FORCE_OVERWRITE = False
-    INTERACTIVE = False
+    FORCE_OVERWRITE = False  # Overwrite whatever that already exists
+    INTERACTIVE = False  # To interact with the shell if something already exists
     NUM_GPUS = 'all'  # all, 1gpu=[0]; 2gpu=[0,1];...
-    TOOLKIT = "fairseq"
-    RUN_NAME = "mymodel"
+    TOOLKIT = "fairseq"  # or custom
     BEAMS = [1, 5]
     METRICS = {"bleu", "chrf", "ter", "bertscore", "comet"}
+    RUN_NAME = "mymodel"
 
-    # Datasets
+    # Datasets for which to train a model
     TRAIN_DATASETS = [
         # {"name": "ccaligned", "sizes": [("original", None)], "languages": ["ti-en"]},
         # {"name": "commoncrawl", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en"]},
@@ -316,14 +316,13 @@ if __name__ == "__main__":
         # {"name": "scielo/health", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en", "pt-en"]},
     ]
 
-    # EVAL_DATASETS = TRAIN_DATASETS
+    # Datasets in which evaluate the different models
     EVAL_DATASETS = [
-        {"name": "iwlst16", "sizes": [("original", None)], "languages": ["de-en"]},
         {"name": "multi30k", "sizes": [("original", None)], "languages": ["de-en"]},
     ]
 
     # Train and Score
-    main(base_path=BASE_PATH, train_datasets=TRAIN_DATASETS, eval_datasets=EVAL_DATASETS, run_name=RUN_NAME,
-         subword_models=SUBWORD_MODELS, vocab_size=VOCAB_SIZE,
-         force_overwrite=FORCE_OVERWRITE, interactive=INTERACTIVE,
-         toolkit=TOOLKIT, num_gpus=NUM_GPUS, beams=BEAMS, metrics=METRICS)
+    train_and_score(base_path=BASE_PATH, train_datasets=TRAIN_DATASETS, eval_datasets=EVAL_DATASETS, run_name=RUN_NAME,
+                    subword_models=SUBWORD_MODELS, vocab_size=VOCAB_SIZE,
+                    force_overwrite=FORCE_OVERWRITE, interactive=INTERACTIVE,
+                    toolkit=TOOLKIT, num_gpus=NUM_GPUS, beams=BEAMS, metrics=METRICS)

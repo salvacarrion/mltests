@@ -420,8 +420,9 @@ def plot_datasets(base_path, datasets, subword_model, vocab_size, force_overwrit
                                   overwrite=force_overwrite)
 
 
-def main(base_path, datasets, encoding_mode, subword_models, vocab_sizes, min_vocab_frequency, make_plots,
-         force_overwrite, split_raw_data=False):
+def build_datasets(base_path, datasets,  subword_models, vocab_sizes, make_plots,
+                   force_overwrite, split_raw_data=False, encoding_mode="encoded", min_vocab_frequency=1):
+    # Deprecated: encoding_mode and min_vocab_frequency
     # Checks
     if encoding_mode not in {"pretokenized", "encoded", "splits"}:
         raise ValueError(f"'encoded_mode' not valid.")
@@ -466,33 +467,25 @@ if __name__ == "__main__":
         BASE_PATH = "/home/scarrion/datasets/nn/translation"
 
     # Variables
-    SUBWORD_MODELS = ["word", "unigram", "char"]  # unigram, bpe, char, or word
+    SUBWORD_MODELS = ["word", "unigram", "char"]  # "word", "unigram", "bpe", "char"
     VOCAB_SIZE = [16000]
-    MIN_VOCAB_FREQUENCY = 1  # Doesn't work
     MAKE_PLOTS = False
     FORCE_OVERWRITE = False
 
     DATASETS = [
-        {"name": "multi30k", "sizes": [("original", None)], "languages": ["de-en"]},
-        # {"name": "europarl", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en"]},
-
         # {"name": "ccaligned", "sizes": [("original", None)], "languages": ["or-en", "ti-en"]},
-        # {"name": "wikimatrix", "sizes": [("original", None)], "languages": ["ar-en", "ja-en", "ko-en"]},
-
         # {"name": "commoncrawl", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en"]},
         # {"name": "europarl", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["cs-en", "de-en", "es-en", "fr-en"]},
         # {"name": "iwlst16", "sizes": [("original", None)], "languages": ["de-en"]},
+        {"name": "multi30k", "sizes": [("original", None)], "languages": ["de-en"]},
         # {"name": "newscommentary", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en"]},
-        # {"name": "scielo/health", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en", "pt-en"]},
         # {"name": "scielo/biological", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en", "pt-en"]},
+        # {"name": "scielo/health", "sizes": [("original", None), ("100k", 100000), ("50k", 50000)], "languages": ["es-en", "pt-en"]},
+        # {"name": "wikimatrix", "sizes": [("original", None)], "languages": ["ar-en", "ja-en", "ko-en"]},
     ]
 
-    # To deprecate?
-    ENCODING_MODE = "encoded"  # splits (raw), encoded (spm), [pretokenized (moses) => Force moses tokenization for everything]
-
     # Create datasets
-    main(base_path=BASE_PATH, datasets=DATASETS, encoding_mode=ENCODING_MODE, subword_models=SUBWORD_MODELS,
-         vocab_sizes=VOCAB_SIZE, min_vocab_frequency=MIN_VOCAB_FREQUENCY, make_plots=MAKE_PLOTS,
-         force_overwrite=FORCE_OVERWRITE)
+    build_datasets(base_path=BASE_PATH, datasets=DATASETS, subword_models=SUBWORD_MODELS,
+                   vocab_sizes=VOCAB_SIZE, make_plots=MAKE_PLOTS, force_overwrite=FORCE_OVERWRITE)
 
     print("Done!")
