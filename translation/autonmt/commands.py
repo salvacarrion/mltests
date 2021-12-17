@@ -1,11 +1,19 @@
+import json
 import os
 import random
 import subprocess
 from pathlib import Path
 
+from translation import utils
+
 random.seed(123)
 
 CONDA_ENVNAME = "mltests"
+METRICS_SUPPORTED = {"bleu", "chrf", "ter", "bertscore", "comet", "beer"}
+METRIC_PARSERS = {"sacrebleu": ("sacrebleu_scores.json", utils.parse_sacrebleu),
+                  "bertscore": ("bert_scores.txt", utils.parse_bertscore),
+                  "comet": ("comet_scores.txt", utils.parse_comet),
+                  "beer": ("beer_scores.txt", utils.parse_beer)}
 
 
 def score_test_files(data_path, trg_lang, metrics=None, src_lang=None, force_overwrite=True):
@@ -13,7 +21,7 @@ def score_test_files(data_path, trg_lang, metrics=None, src_lang=None, force_ove
         metrics = {'bleu'}  # {"bleu", "chrf", "ter", "bertscore", "comet"}
 
     # Check supported metrics
-    metrics_diff = metrics.difference({"bleu", "chrf", "ter", "bertscore", "comet"})
+    metrics_diff = metrics.difference(METRICS_SUPPORTED)
     if metrics_diff:
         print(f"[WARNING] These metrics are not supported: {str(metrics_diff)}")
         if metrics == metrics_diff:
@@ -53,6 +61,13 @@ def score_test_files(data_path, trg_lang, metrics=None, src_lang=None, force_ove
         print(f"\t=> Comet scoring...")
         comet_scores_path = os.path.join(score_path, "comet_scores.txt")
         cmd = f"comet-score -s {src_file_path} -t {hyp_file_path} -r {ref_file_path} > {comet_scores_path}"
+        subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {cmd}"])
+
+    # Beer
+    if 'beer' in metrics:
+        print(f"\t=> Beer scoring...")
+        beer_scores_path = os.path.join(score_path, "beer_scores.txt")
+        cmd = f"beer -s {hyp_file_path} -r {ref_file_path} > {beer_scores_path}"
         subprocess.call(['/bin/bash', '-i', '-c', f"conda activate {CONDA_ENVNAME} && {cmd}"])
 
 
