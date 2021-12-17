@@ -171,7 +171,7 @@ def evaluate_model(toolkit, base_path, model_ds_path, eval_datasets, run_name, c
                     raise NotImplementedError(f"Unknown toolkit: {toolkit}")
 
 
-def create_report(output_path, metrics):
+def create_report(output_path, metrics, force_overwrite):
     # Create logs path
     metrics_path = os.path.join(output_path, "metrics")
     plots_path = os.path.join(output_path, "plots")
@@ -183,7 +183,7 @@ def create_report(output_path, metrics):
     df_metrics = save_metrics(output_path=metrics_path, metrics=metrics)
 
     # Plot metrics
-    plot_metrics(output_path=plots_path, df_metrics=df_metrics)
+    plot_metrics(output_path=plots_path, df_metrics=df_metrics, force_overwrite=force_overwrite)
 
 
 def parse_metrics(toolkit, base_path, train_datasets, eval_datasets, run_name, subword_model, vocab_size, beams):
@@ -270,8 +270,29 @@ def save_metrics(output_path, metrics):
     return df
 
 
-def plot_metrics(output_path, df_metrics):
-    pass
+def plot_metrics(output_path, df_metrics, force_overwrite):
+    from translation.preprocess import plots
+
+    SAVE_FIGURES = True
+    SHOW_FIGURES = False
+
+    # Set backend
+    if SAVE_FIGURES:
+        plots.set_non_gui_backend()
+        if SHOW_FIGURES:
+            raise ValueError("'save_fig' is incompatible with 'show_fig'")
+
+    print(f"- Plotting datasets...")
+    print(f"- [WARNING]: Matplotlib might miss some images if the loop is too fast")
+
+    metric_id = "beam_5__sacrebleu_bleu"
+    metric_name = metric_id.split('_')[-1].upper()
+    p_fname = f"metrics__{metric_name}"
+    plots.catplot(data=df_metrics, x="run_name", y=metric_id, hue="eval_dataset",
+                  title=f"Model comparison", xlabel="Models", ylabel=metric_name, leyend_title=None,
+                  output_dir=output_path, fname=p_fname, aspect_ratio=(8, 4), size=1.0,
+                  save_fig=SAVE_FIGURES, show_fig=SHOW_FIGURES, overwrite=True, data_format="{:.2f}")
+    asd = 3
 
 
 def train_and_score(base_path, train_datasets, eval_datasets, run_name_prefix, subword_models, vocab_size, force_overwrite,
@@ -386,7 +407,7 @@ def train_and_score(base_path, train_datasets, eval_datasets, run_name_prefix, s
 
     # Create report
     if not disable_report:
-        kwargs = {'output_path': output_path, 'metrics': scores}
+        kwargs = {'output_path': output_path, 'metrics': scores, 'force_overwrite': force_overwrite}
         utils.logged_task(mylogger, {}, "create_report", create_report, **kwargs)
 
     mylogger.info(f"########## DONE! ##########")
@@ -426,6 +447,7 @@ if __name__ == "__main__":
     # Datasets in which evaluate the different models
     EVAL_DATASETS = [
         {"name": "multi30k", "sizes": [("original", None)], "languages": ["de-en"]},
+        {"name": "iwlst16", "sizes": [("original", None)], "languages": ["de-en"]},
     ]
 
     # Train and Score
@@ -433,6 +455,6 @@ if __name__ == "__main__":
                     run_name_prefix=RUN_NAME_PREFIX, subword_models=SUBWORD_MODELS, vocab_size=VOCAB_SIZE,
                     force_overwrite=FORCE_OVERWRITE, interactive=INTERACTIVE,
                     toolkit=TOOLKIT, num_gpus=NUM_GPUS, beams=BEAMS, metrics=METRICS, output_path=OUTPUT_PATH,
-                    disable_preprocess=True, disable_train=False, disable_evaluate=False, disable_metrics=False,
+                    disable_preprocess=False, disable_train=False, disable_evaluate=False, disable_metrics=False,
                     disable_report=False
                     )

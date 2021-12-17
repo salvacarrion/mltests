@@ -18,7 +18,7 @@ def set_non_gui_backend():
 
 
 def catplot(data, x, y, hue, title, xlabel, ylabel, leyend_title, output_dir, fname, aspect_ratio=(12, 8), size=1.0,
-            show_values=True, dpi=150, show_fig=False, save_fig=True, formats=None, overwrite=True):
+            show_values=True, dpi=150, show_fig=False, save_fig=True, formats=None, overwrite=True, data_format='{:d}'):
     if formats is None:
         formats = ["png", "pdf"]
 
@@ -46,7 +46,7 @@ def catplot(data, x, y, hue, title, xlabel, ylabel, leyend_title, output_dir, fn
     if show_values:
         ax = g.facet_axis(0, 0)
         for c in ax.containers:
-            labels = [int(v.get_height()) for v in c]
+            labels = [data_format.format(float(v.get_height())) for v in c]
             ax.bar_label(c, labels=labels, label_type='edge', fontsize=8 * size)
 
     # properties

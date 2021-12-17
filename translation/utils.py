@@ -106,13 +106,13 @@ def save_json(d, savepath):
         json.dump(d, f)
 
 
-def create_logger(logs_path):
+def create_logger(logs_path, log_level=logging.INFO):
     # Create logget path
     Path(logs_path).mkdir(parents=True, exist_ok=True)
 
     # Create logger
     mylogger = logging.getLogger()
-    mylogger.setLevel(logging.DEBUG)
+    mylogger.setLevel(log_level)
 
     # Define format
     logformat = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
@@ -172,7 +172,7 @@ def parse_sacrebleu(text):
     result = {}
     metrics = json.loads("".join(text))
     for m_dict in metrics:
-        m_name = f"sacrebleu_{m_dict['name']}".lower().strip()
+        m_name = m_dict['name'].lower().strip()
         result[m_name] = float(m_dict["score"])
     return result
 
