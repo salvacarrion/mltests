@@ -1,3 +1,7 @@
+# Output path
+.output/
+output/
+
 # Development
 .idea/
 .DS_Store

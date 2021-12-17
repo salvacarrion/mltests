@@ -1,4 +1,6 @@
+import sys
 import datetime
+import json
 import logging
 import os
 import random
@@ -137,7 +139,7 @@ def evaluate_model(toolkit, base_path, model_ds_path, eval_datasets, run_name, c
 
                     # Preprocess data
                     eval_path = os.path.join(model_ds_path, "models", "fairseq", "runs", run_name, "eval",
-                                             eval_name)  # (extern) encoded files werw copied here
+                                             eval_name)  # (extern) encoded files were copied here
                     eval_data_path = os.path.join(eval_path, "data")
                     eval_data_bin_path = os.path.join(eval_path, "data-bin")
 
@@ -169,69 +171,157 @@ def evaluate_model(toolkit, base_path, model_ds_path, eval_datasets, run_name, c
                     raise NotImplementedError(f"Unknown toolkit: {toolkit}")
 
 
-def logged_task(row, fn_name, fn, **kwargs):
-    start_fn = time.time()
-    logging.info(f"***** {fn_name.title()} started *****")
-    logging.info(f"----- [{fn_name.title()}] Start time (ss.ms): {start_fn} -----")
+def create_report(output_path, metrics):
+    # Create logs path
+    metrics_path = os.path.join(output_path, "metrics")
+    plots_path = os.path.join(output_path, "plots")
+    for p in [metrics_path, plots_path]:
+        path = Path(p)
+        path.mkdir(parents=True, exist_ok=True)
 
-    # Call function
-    try:
-        fn_status = "okay"
-        fn(**kwargs)
-    except Exception as e:
-        logging.error(str(e))
-        fn_status = str(e)
+    # Save scores
+    df_metrics = save_metrics(output_path=metrics_path, metrics=metrics)
 
-    # Get elapsed time
-    end_fn = time.time()
-    elapsed_fn = end_fn - start_fn
-    elapsed_fn_str = time.strftime("%H:%M:%S", time.gmtime(elapsed_fn))
-
-    # Log time
-    logging.info(f"----- [{fn_name.title()}] End time (ss.ms): {end_fn} -----")
-    # logging.info(f"----- [{fn_name.title()}] Time elapsed (ss.ms): {elapsed_fn} -----")
-    logging.info(f"----- [{fn_name.title()}] Time elapsed (hh:mm:ss.ms): {elapsed_fn_str} -----")
-    logging.info(f"***** {fn_name.title()} ended *****")
-
-    # Store results
-    row[f"start_{fn_name}"] = start_fn
-    row[f"end_{fn_name}"] = end_fn
-    row[f"elapsed_{fn_name}"] = elapsed_fn
-    row[f"elapsed_{fn_name}_str"] = elapsed_fn_str
-    row[f"{fn_name}_status"] = fn_status
+    # Plot metrics
+    plot_metrics(output_path=plots_path, df_metrics=df_metrics)
 
 
-def train_and_score(base_path, train_datasets, eval_datasets, run_name, subword_models, vocab_size, force_overwrite,
-                    interactive, toolkit, num_gpus, beams, metrics, logs_path="logs"):
-    # Setup logger
-    Path(logs_path).mkdir(parents=True, exist_ok=True)
-    logging.basicConfig(filename=os.path.join(logs_path, 'logger.log'), filemode='w',
-                        format='%(asctime)s - %(levelname)s - %(message)s', level=logging.DEBUG)
-    logging.info('########## LOGGER INITIATED ##########')
+def parse_metrics(toolkit, base_path, train_datasets, eval_datasets, run_name, subword_model, vocab_size, beams):
+    print(f"- Parsing metrics....")
+
+    # Walk through trained models
+    scores = []
+    for train_ds in train_datasets:  # Training dataset
+        train_ds_name = train_ds["name"]
+        for train_ds_size_name, train_ds_max_lines in train_ds["sizes"]:  # Training lengths
+            for train_lang_pair in train_ds["languages"]:  # Training languages
+                train_src_lang, train_trg_lang = train_lang_pair.split("-")
+
+                # Train dataset path (Model path)
+                train_ds_path = os.path.join(base_path, train_ds_name, train_ds_size_name, train_lang_pair)
+
+                # Walk through Evaluations
+                print(f"\tParsing model evaluations: (run_name= {run_name}, beams={str(beams)}])")
+                for eval_ds in eval_datasets:  # Dataset name (to evaluate)
+                    eval_ds_name = eval_ds["name"]
+                    for eval_ds_size_name, eval_ds_max_lines in eval_ds["sizes"]:  # Dataset lengths (to evaluate)
+                        for eval_lang_pair in eval_ds["languages"]:  # Dataset languages (to evaluate)
+                            eval_src_lang, eval_trg_lang = eval_lang_pair.split("-")
+
+                            # Get eval name
+                            eval_name = "_".join([eval_ds_name, eval_ds_size_name, eval_lang_pair])
+
+                            # Evaluation path
+                            eval_path = os.path.join(train_ds_path, "models", toolkit, "runs", run_name, "eval",
+                                                     eval_name)
+
+                            # Walk through beams
+                            run_scores = {
+                                "train_dataset": train_ds_name, "train_size": train_ds_size_name, "train_lang_pair": train_lang_pair,
+                                "eval_dataset": eval_ds_name, "eval_size": eval_ds_size_name, "eval_lang_pair": eval_lang_pair,
+                                "run_name": run_name, "subword_model": subword_model, "vocab_size": vocab_size,
+                                "beams": {}
+                            }
+                            for beam_width in beams:
+                                scores_path = os.path.join(eval_path, "beams", f"beam_{beam_width}", "scores")
+
+                                # Walk through metric files
+                                beam_scores = {}
+                                for m_tool, (m_fname, m_parser) in commands.METRIC_PARSERS.items():
+
+                                    # Read file
+                                    filename = os.path.join(scores_path, m_fname)
+                                    if os.path.exists(filename):
+                                        with open(filename, 'r') as f:
+                                            m_scores = m_parser(text=f.readlines())
+                                            for key, value in m_scores.items():
+                                                m_name = f"{m_tool}_{key}".lower().strip()
+                                                beam_scores[m_name] = value
+                                    else:
+                                        logging.info(f"There are no metrics for '{m_tool}'")
+
+                                # Add beam scores
+                                run_scores["beams"].update({f"beam_{str(beam_width)}": beam_scores})
+
+                            # Add run scores
+                            scores.append(run_scores)
+    return scores
+
+
+def save_metrics(output_path, metrics):
+    # Save json metrics
+    json_metrics_path = os.path.join(output_path, "metrics.json")
+    utils.save_json(metrics, json_metrics_path)
+
+    # Convert to pandas
+    rows = []
+    for i in range(len(metrics)):
+        run_scores = dict(metrics[i])  # Copy
+        beams_unrolled = {f"{beam_width}__{k}": v for beam_width in metrics[0]["beams"].keys() for k, v in
+                          run_scores["beams"][beam_width].items()}
+        run_scores.pop("beams")
+        run_scores.update(beams_unrolled)
+        rows.append(run_scores)
+
+    # Convert to pandas
+    df = pd.DataFrame(rows)
+    csv_metrics_path = os.path.join(output_path, "metrics.csv")
+    df.to_csv(csv_metrics_path, index=False)
+    return df
+
+
+def plot_metrics(output_path, df_metrics):
+    pass
+
+
+def train_and_score(base_path, train_datasets, eval_datasets, run_name_prefix, subword_models, vocab_size, force_overwrite,
+                    interactive, toolkit, num_gpus, beams, metrics, output_path,
+                    disable_preprocess=False, disable_train=False, disable_evaluate=False, disable_metrics=False,
+                    disable_report=False):
+    # Create logger
+    mylogger = utils.create_logger(logs_path=os.path.join(output_path, "logs"))
+    mylogger.info('########## LOGGER INITIATED ##########')
+
+    # Compute total tasks
+    total_train_datasets = utils.count_datasets(eval_datasets)
+    total_eval_datasets = utils.count_datasets(train_datasets)
+    task_multiplier = len(subword_models)*len(vocab_size)
+    total_models2train = 0 if disable_train else task_multiplier * total_train_datasets
+    total_models2evaluate = 0 if disable_evaluate else task_multiplier * total_train_datasets
+
+    mylogger.info(f"***** Train and Score *****")
+    mylogger.info(f"- Total train datasets ({str(total_models2train)}):")
+    mylogger.info(f"- Total evaluation datasets ({str(total_eval_datasets)}):")
+    mylogger.info(f"- Task multiplier ({str(task_multiplier)}):")
+    mylogger.info(f"- Total models to train ({str(total_models2train)}):")
+    mylogger.info(f"- Total models to evaluate ({str(total_models2evaluate)}):")
 
     # Execute runs
     rows = []
+    scores = []
     runs_counter = 0
     for sw_model in subword_models:
         for voc_size in vocab_size:
             # Variables
             runs_counter += 1
-            run_name = f"{run_name}_{sw_model}_{voc_size}"
+            run_name = f"{run_name_prefix}_{sw_model}_{voc_size}"
             row = {}
 
             # Summary
-            logging.info(f"***** Starting new run *****")
-            logging.info(f"- Summary for ({str(run_name)}):")
-            logging.info(f"\t- Run name: {str(run_name)}")
-            logging.info(f"\t- Run start time: {str(datetime.datetime.now())}")
-            logging.info(f"\t- Toolkit: {str(toolkit)}")
-            logging.info(f"\t- Metrics: {str(metrics)}")
-            logging.info(f"\t- Num. GPUs: {str(num_gpus)}")
-            logging.info(f"\t- Force overwrite: {str(force_overwrite)}")
-            logging.info(f"\t- Interactive: {str(interactive)}")
-            logging.info(f"\t- Subword model: {str(sw_model)}")
-            logging.info(f"\t- Vocabulary size: {str(voc_size)}")
-            logging.info(f"\t- Run number: {str(runs_counter)}")
+            mylogger.info(f"***** Starting new run *****")
+            mylogger.info(f"- Summary for ({str(run_name)}):")
+            mylogger.info(f"\t- Run name: {str(run_name)}")
+            mylogger.info(f"\t- Run start time: {str(datetime.datetime.now())}")
+            mylogger.info(f"\t- Toolkit: {str(toolkit)}")
+            mylogger.info(f"\t- Metrics: {str(metrics)}")
+            mylogger.info(f"\t- Num. GPUs: {str(num_gpus)}")
+            mylogger.info(f"\t- Force overwrite: {str(force_overwrite)}")
+            mylogger.info(f"\t- Interactive: {str(interactive)}")
+            mylogger.info(f"\t- Subword model: {str(sw_model)}")
+            mylogger.info(f"\t- Vocabulary size: {str(voc_size)}")
+            mylogger.info(f"\t- Run number: {str(runs_counter)}")
+            mylogger.info(f"\t- Training models: {str(runs_counter if total_models2train else 0)}/{str(total_models2train)}")
+            mylogger.info(f"\t- Evaluating models: {str(runs_counter if total_models2evaluate else 0)}/{str(total_models2evaluate)}")
 
             # Add to row
             row["run_name"] = str(run_name)
@@ -246,22 +336,33 @@ def train_and_score(base_path, train_datasets, eval_datasets, run_name, subword_
             row["run_number"] = str(runs_counter)
 
             # Preprocessing
-            kwargs = {'toolkit': toolkit, 'base_path': base_path, 'datasets': train_datasets, 'subword_model': sw_model,
-                      'vocab_size': voc_size, 'force_overwrite': force_overwrite, 'interactive': interactive}
-            logged_task(row, "preprocess", preprocess, **kwargs)
+            if not disable_preprocess:
+                kwargs = {'toolkit': toolkit, 'base_path': base_path, 'datasets': train_datasets, 'subword_model': sw_model,
+                          'vocab_size': voc_size, 'force_overwrite': force_overwrite, 'interactive': interactive}
+                utils.logged_task(mylogger, row, "preprocess", preprocess, **kwargs)
 
             # Train model
-            kwargs = {'toolkit': toolkit, 'base_path': base_path, 'datasets': train_datasets, 'run_name': run_name,
-                      'subword_model': sw_model, 'vocab_size': voc_size, 'num_gpus': num_gpus,
-                      'force_overwrite': force_overwrite, 'interactive': interactive}
-            logged_task(row, "train", train, **kwargs)
+            if not disable_train:
+                kwargs = {'toolkit': toolkit, 'base_path': base_path, 'datasets': train_datasets, 'run_name': run_name,
+                          'subword_model': sw_model, 'vocab_size': voc_size, 'num_gpus': num_gpus,
+                          'force_overwrite': force_overwrite, 'interactive': interactive}
+                utils.logged_task(mylogger, row, "train", train, **kwargs)
 
             # Evaluate model
-            kwargs = {'toolkit': toolkit, 'base_path': base_path, 'train_datasets': train_datasets,
-                      'eval_datasets': eval_datasets,
-                      'run_name': run_name, 'subword_model': sw_model, 'vocab_size': voc_size, 'beams': beams,
-                      'metrics': metrics, 'force_overwrite': force_overwrite, 'interactive': interactive}
-            logged_task(row, "evaluate", evaluate, **kwargs)
+            if not disable_evaluate:
+                kwargs = {'toolkit': toolkit, 'base_path': base_path, 'train_datasets': train_datasets,
+                          'eval_datasets': eval_datasets,
+                          'run_name': run_name, 'subword_model': sw_model, 'vocab_size': voc_size, 'beams': beams,
+                          'metrics': metrics, 'force_overwrite': force_overwrite, 'interactive': interactive}
+                utils.logged_task(mylogger, row, "evaluate", evaluate, **kwargs)
+
+            # Get metrics
+            if not disable_metrics:
+                kwargs = {'toolkit': toolkit, 'base_path': base_path,
+                          'train_datasets': train_datasets, 'eval_datasets': eval_datasets,
+                          'run_name': run_name, 'subword_model': sw_model, 'vocab_size': voc_size, 'beams': beams}
+                run_scores = utils.logged_task(mylogger, row, "parse_metrics", parse_metrics, **kwargs)
+                scores += run_scores
 
             # Add row to rows
             row["run_end_time"] = str(datetime.datetime.now())
@@ -270,20 +371,25 @@ def train_and_score(base_path, train_datasets, eval_datasets, run_name, subword_
             # Serve partial_runs
             try:
                 # Create logs path
-                path = Path(logs_path, "runs")
+                path = Path(os.path.join(output_path, "logs", "runs"))
                 path.mkdir(parents=True, exist_ok=True)
 
                 # Save json
                 utils.save_json(row, os.path.join(path, f"{str(runs_counter)}__{run_name}.json"))
             except Exception as e:
-                logging.error(e)
+                mylogger.error(e)
 
     # Save pandas with results
     df = pd.DataFrame(rows)
-    df.to_csv(os.path.join(logs_path, f"runs_summary.csv"), index=False)
+    df.to_csv(os.path.join(output_path, "logs", f"runs_summary.csv"), index=False)
+    mylogger.info(f"- Total runs: {runs_counter}")
 
-    logging.info(f"- Total runs: {runs_counter}")
-    logging.info(f"########## DONE! ##########")
+    # Create report
+    if not disable_report:
+        kwargs = {'output_path': output_path, 'metrics': scores}
+        utils.logged_task(mylogger, {}, "create_report", create_report, **kwargs)
+
+    mylogger.info(f"########## DONE! ##########")
 
 
 if __name__ == "__main__":
@@ -294,15 +400,16 @@ if __name__ == "__main__":
         BASE_PATH = "/home/scarrion/datasets/nn/translation"
 
     # Variables
-    SUBWORD_MODELS = ["word"]
+    SUBWORD_MODELS = ["word", "unigram", "char"]
     VOCAB_SIZE = [16000]
     FORCE_OVERWRITE = False  # Overwrite whatever that already exists
     INTERACTIVE = False  # To interact with the shell if something already exists
     NUM_GPUS = 'all'  # all, 1gpu=[0]; 2gpu=[0,1];...
     TOOLKIT = "fairseq"  # or custom
     BEAMS = [1, 5]
-    METRICS = {"bleu", "chrf", "ter", "bertscore", "comet"}
-    RUN_NAME = "mymodel"
+    METRICS = {"bleu", "chrf", "ter", "bertscore", "comet", "beer"}
+    RUN_NAME_PREFIX = "mymodel"
+    OUTPUT_PATH = os.path.join(BASE_PATH, "__outputs")
 
     # Datasets for which to train a model
     TRAIN_DATASETS = [
@@ -322,7 +429,10 @@ if __name__ == "__main__":
     ]
 
     # Train and Score
-    train_and_score(base_path=BASE_PATH, train_datasets=TRAIN_DATASETS, eval_datasets=EVAL_DATASETS, run_name=RUN_NAME,
-                    subword_models=SUBWORD_MODELS, vocab_size=VOCAB_SIZE,
+    train_and_score(base_path=BASE_PATH, train_datasets=TRAIN_DATASETS, eval_datasets=EVAL_DATASETS,
+                    run_name_prefix=RUN_NAME_PREFIX, subword_models=SUBWORD_MODELS, vocab_size=VOCAB_SIZE,
                     force_overwrite=FORCE_OVERWRITE, interactive=INTERACTIVE,
-                    toolkit=TOOLKIT, num_gpus=NUM_GPUS, beams=BEAMS, metrics=METRICS)
+                    toolkit=TOOLKIT, num_gpus=NUM_GPUS, beams=BEAMS, metrics=METRICS, output_path=OUTPUT_PATH,
+                    disable_preprocess=True, disable_train=False, disable_evaluate=False, disable_metrics=False,
+                    disable_report=False
+                    )
