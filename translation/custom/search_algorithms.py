@@ -14,7 +14,6 @@ def greedy_search(model, ds, sos_id, eos_id, batch_size, max_tokens, beam_width,
     idxs = []
     probabilities = []
     with torch.no_grad():
-        eval_losses, eval_errors, eval_sizes = [], [], []
         for x, _ in tqdm.tqdm(eval_dataloader, total=len(eval_dataloader)):
             # Move to device
             x = x.to(device)
