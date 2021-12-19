@@ -2,6 +2,7 @@
 
 # Deep learning
 torch==1.10.*
+pytorch-lightning==3.0.*
 tensorflow==2.7.*
 segmentation-models==1.0.*
 

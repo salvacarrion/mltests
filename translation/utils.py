@@ -5,6 +5,7 @@ from collections import defaultdict
 import sys
 import logging
 import os
+import datetime
 import time
 from pathlib import Path
 
@@ -129,14 +130,16 @@ def create_logger(logs_path, log_level=logging.INFO):
     mylogger.addHandler(stdout_handler)
 
     # Print something
-    mylogger.info('Starting logger...')
+    mylogger.info("########## LOGGER STARTED ##########")
+    mylogger.info(f"- Logs path: {logs_path}")
     return mylogger
 
 
 def logged_task(logger, row, fn_name, fn, **kwargs):
     start_fn = time.time()
+    start_dt = datetime.datetime.now()
     logger.info(f"***** {fn_name.title()} started *****")
-    logger.info(f"----- [{fn_name.title()}] Start time (ss.ms): {start_fn} -----")
+    logger.info(f"----- [{fn_name.title()}] Start time: {start_dt} -----")
 
     # Call function (...and propagate errors)
     result = None
@@ -149,19 +152,18 @@ def logged_task(logger, row, fn_name, fn, **kwargs):
 
     # Get elapsed time
     end_fn = time.time()
+    end_dt = datetime.datetime.now()
     elapsed_fn = end_fn - start_fn
-    elapsed_fn_str = time.strftime("%H:%M:%S", time.gmtime(elapsed_fn))
+    elapsed_fn_str = str(datetime.timedelta(seconds=elapsed_fn))
 
     # Log time
-    logger.info(f"----- [{fn_name.title()}] End time (ss.ms): {end_fn} -----")
-    # logger.info(f"----- [{fn_name.title()}] Time elapsed (ss.ms): {elapsed_fn} -----")
     logger.info(f"----- [{fn_name.title()}] Time elapsed (hh:mm:ss.ms): {elapsed_fn_str} -----")
+    logger.info(f"----- [{fn_name.title()}] End time: {end_dt} -----")
     logger.info(f"***** {fn_name.title()} ended *****")
 
     # Store results
-    row[f"start_{fn_name}"] = start_fn
-    row[f"end_{fn_name}"] = end_fn
-    row[f"elapsed_{fn_name}"] = elapsed_fn
+    row[f"start_{fn_name}"] = start_dt
+    row[f"end_{fn_name}"] = end_dt
     row[f"elapsed_{fn_name}_str"] = elapsed_fn_str
     row[f"{fn_name}_status"] = fn_status
 
@@ -171,6 +173,8 @@ def logged_task(logger, row, fn_name, fn, **kwargs):
 def parse_sacrebleu(text):
     result = {}
     metrics = json.loads("".join(text))
+    metrics = [metrics] if isinstance(metrics, dict) else metrics
+
     for m_dict in metrics:
         m_name = m_dict['name'].lower().strip()
         result[m_name] = float(m_dict["score"])

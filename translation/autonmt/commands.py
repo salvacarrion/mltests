@@ -44,6 +44,8 @@ def score_test_files(data_path, trg_lang, metrics=None, src_lang=None, force_ove
     sb_m += "chrf " if "chrf" in metrics else ""
     sb_m += "ter " if "ter" in metrics else ""
     if sb_m:
+        # The max ngram (max_ngram_order:) is default to 4 as the it was found to be the highest correlation with monolingual human judgements
+        # Source: https://towardsdatascience.com/machine-translation-evaluation-with-sacrebleu-and-bertscore-d7fdb0c47eb3
         print(f"\t=> Sacrebleu scoring...")
         sacrebleu_scores_path = os.path.join(score_path, "sacrebleu_scores.json")
         cmd = f"sacrebleu {ref_file_path} -i {hyp_file_path} -m {sb_m} -w 5 > {sacrebleu_scores_path}"  # bleu chrf ter

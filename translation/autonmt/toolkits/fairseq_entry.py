@@ -9,11 +9,12 @@ random.seed(123)
 from translation.autonmt import commands
 
 CONDA_ENVNAME = "fairseq"
+TOOLKIT_NAME = "fairseq"
 
 
 def fairseq_preprocess(ds_path, src_lang, trg_lang, subword_model, vocab_size, force_overwrite, interactive):
     # Create path (if needed)
-    toolkit_path = os.path.join(ds_path, "models", "fairseq")
+    toolkit_path = os.path.join(ds_path, "models", TOOLKIT_NAME)
     path = Path(toolkit_path)
     path.mkdir(parents=True, exist_ok=True)
 
@@ -64,8 +65,9 @@ def fairseq_preprocess_with_vocab(data_path, data_bin_path, src_lang, trg_lang, 
                      f"conda activate {CONDA_ENVNAME} && {cmd}"])  # https://stackoverflow.com/questions/12060863/python-subprocess-call-a-bash-alias/25099813
 
 
-def fairseq_train(data_path, run_name, subword_model, vocab_size, model_path, num_gpus, force_overwrite, interactive):
-    toolkit_path = os.path.join(data_path, "models", "fairseq")
+def fairseq_train(data_path, run_name, src_lang, trg_lang, subword_model, vocab_size, model_path, num_gpus,
+                  force_overwrite, interactive):
+    toolkit_path = os.path.join(data_path, "models", TOOLKIT_NAME)
     data_bin_path = os.path.join(toolkit_path, "data-bin", subword_model, str(vocab_size))
     checkpoints_path = os.path.join(toolkit_path, "runs", run_name, "checkpoints")
     last_checkpoint_path = os.path.join(checkpoints_path, "checkpoint_last.pt")
