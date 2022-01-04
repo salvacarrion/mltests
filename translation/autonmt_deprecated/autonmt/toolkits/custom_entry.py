@@ -1,13 +1,12 @@
 import os
 import random
 import shutil
-import subprocess
 from pathlib import Path
 
 random.seed(123)
 
-from translation.autonmt import commands
-from translation.custom import preprocessor, trainer
+from translation.autonmt_deprecated.autonmt import commands
+from translation.autonmt_deprecated.custom import preprocessor, trainer
 
 CONDA_ENVNAME = "mltests"
 TOOLKIT_NAME = "custom"
@@ -50,6 +49,14 @@ def custom_preprocess(ds_path, src_lang, trg_lang, subword_model, vocab_size, fo
                             src_spm_model=src_spm_model, trg_spm_model=src_spm_model)
 
 
+def _custom_preprocess(destdir, src_lang, trg_lang, src_vocab_path, trg_vocab_path, train_fname,
+                       val_fname, test_fname, src_spm_model_path, trg_spm_model_path):
+    preprocessor.preprocess(destdir=destdir, src_lang=src_lang, trg_lang=trg_lang,
+                            trainpref=train_fname, validpref=val_fname, testpref=test_fname,
+                            src_vocab=src_vocab_path, trg_vocab=trg_vocab_path,
+                            src_spm_model=src_spm_model_path, trg_spm_model=trg_spm_model_path)
+
+
 def custom_train(data_path, run_name, src_lang, trg_lang, subword_model, vocab_size, model_path, num_gpus,
                  force_overwrite, interactive):
     toolkit_path = os.path.join(data_path, "models", TOOLKIT_NAME)
@@ -85,8 +92,8 @@ def custom_train(data_path, run_name, src_lang, trg_lang, subword_model, vocab_s
                   logs_path=logs_path)
 
 
-def custom_translate(data_path, checkpoint_path, output_path, src_lang, trg_lang, subword_model, spm_model_path,
-                      force_overwrite, interactive, beam_width=5, max_length=200, score=True, metrics=None):
+def custom_translate(data_path, checkpoint_path, output_path, src_lang, trg_lang, beam_width, max_length,
+                     force_overwrite, interactive):
     # Check checkpoint path
     if not os.path.exists(checkpoint_path):
         raise IOError("\t=> The checkpoint does not exists")
@@ -106,21 +113,27 @@ def custom_translate(data_path, checkpoint_path, output_path, src_lang, trg_lang
                 return
 
     # Translate model
-    trainer.translate(data_path, checkpoint_path, output_path, src_lang, trg_lang, beam_width=beam_width,
+    trainer.translate(data_path, checkpoint_path, output_path, src_lang, trg_lang,
+                      beam_width=beam_width,
                       max_length=max_length)
 
+
+def custom_score(data_path, output_path, src_lang, trg_lang, trg_spm_model_path, metrics, force_overwrite, interactive):
+    # Input files
+    src_tok_path = os.path.join(data_path, "src.tok")
+    ref_tok_path = os.path.join(data_path, "ref.tok")
+    hyp_tok_path = os.path.join(data_path, "hyp.tok")
+
+    # Output files
+    src_txt_path = os.path.join(data_path, "src.txt")
+    ref_txt_path = os.path.join(data_path, "ref.txt")
+    hyp_txt_path = os.path.join(data_path, "hyp.txt")
+
     # Detokenize
-    src_tok_path = os.path.join(output_path, "src.tok")
-    ref_tok_path = os.path.join(output_path, "ref.tok")
-    hyp_tok_path = os.path.join(output_path, "hyp.tok")
-    src_txt_path = os.path.join(output_path, "src.txt")
-    ref_txt_path = os.path.join(output_path, "ref.txt")
-    hyp_txt_path = os.path.join(output_path, "hyp.txt")
-    commands.spm_decode(spm_model_path, input_file=src_tok_path, output_file=src_txt_path)
-    commands.spm_decode(spm_model_path, input_file=ref_tok_path, output_file=ref_txt_path)
-    commands.spm_decode(spm_model_path, input_file=hyp_tok_path, output_file=hyp_txt_path)
+    commands.spm_decode(trg_spm_model_path, input_file=src_tok_path, output_file=src_txt_path)
+    commands.spm_decode(trg_spm_model_path, input_file=ref_tok_path, output_file=ref_txt_path)
+    commands.spm_decode(trg_spm_model_path, input_file=hyp_tok_path, output_file=hyp_txt_path)
 
     # Score
-    if score:
-        commands.score_test_files(data_path=output_path, src_lang=src_lang, trg_lang=trg_lang,
-                                  metrics=metrics, force_overwrite=force_overwrite)
+    commands.score_test_files(data_path=output_path, src_lang=src_lang, trg_lang=trg_lang,
+                              metrics=metrics, force_overwrite=force_overwrite, interactive=interactive)

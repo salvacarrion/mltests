@@ -1,6 +1,5 @@
 # Output path
-.output/
-output/
+.outputs/
 
 # Development
 .idea/

@@ -1,10 +1,9 @@
-import json
 import os
 import random
 import subprocess
 from pathlib import Path
 
-from translation import utils
+from translation.autonmt_deprecated import utils
 
 random.seed(123)
 
@@ -16,7 +15,7 @@ METRIC_PARSERS = {"sacrebleu": ("sacrebleu_scores.json", utils.parse_sacrebleu),
                   "beer": ("beer_scores.txt", utils.parse_beer)}
 
 
-def score_test_files(data_path, trg_lang, metrics=None, src_lang=None, force_overwrite=True):
+def score_test_files(data_path, trg_lang, metrics=None, src_lang=None, force_overwrite=True, interactive=False):
     if metrics is None:
         metrics = {'bleu'}  # {"bleu", "chrf", "ter", "bertscore", "comet"}
 

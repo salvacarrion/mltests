@@ -2,8 +2,8 @@ import os
 from pathlib import Path
 
 import torch
-from translation.custom.dataset import TranslationDataset
-from translation.custom import models, search_algorithms
+from translation.autonmt_deprecated.custom.dataset import TranslationDataset
+from translation.autonmt_deprecated.custom import search_algorithms, models
 
 
 def train(data_path, src_lang, trg_lang, batch_size=128, max_tokens=None, max_epochs=10, learning_rate=1e-3,

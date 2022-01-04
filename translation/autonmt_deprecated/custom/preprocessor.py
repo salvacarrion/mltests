@@ -50,7 +50,7 @@ def preprocess(destdir, src_lang, trg_lang, trainpref="train", validpref="val", 
     # Copy spm models (check if there is just one) *******************
     if src_spm_model:
         trg_spm_model = src_spm_model if (src_spm_model == trg_spm_model) else trg_spm_model  # Single model
-        spm_models_files = [(src_spm_model, f"vocab_{src_lang}.model"), (trg_spm_model, f"spm_{trg_lang}.model")]
+        spm_models_files = [(src_spm_model, f"spm_{src_lang}.model"), (trg_spm_model, f"spm_{trg_lang}.model")]
 
         # Copy spm models files
         for spm_file, fname in spm_models_files:
@@ -63,3 +63,4 @@ def preprocess(destdir, src_lang, trg_lang, trainpref="train", validpref="val", 
             else:
                 raise IOError(f"Missing spm model: {spm_file}")
     asd = 3
+

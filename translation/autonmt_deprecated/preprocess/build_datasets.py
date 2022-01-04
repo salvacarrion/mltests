@@ -10,9 +10,9 @@ import tqdm
 
 random.seed(123)
 
-from translation.preprocess import plots
-from translation import utils
-from translation.autonmt import commands
+from translation.autonmt_deprecated.preprocess import plots
+from translation.autonmt_deprecated import utils
+from translation.autonmt_deprecated.autonmt import commands
 
 CONDA_ENVNAME = "mltests"
 

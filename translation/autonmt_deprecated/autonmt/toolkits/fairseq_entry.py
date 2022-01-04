@@ -6,7 +6,7 @@ from pathlib import Path
 
 random.seed(123)
 
-from translation.autonmt import commands
+from translation.autonmt_deprecated.autonmt import commands
 
 CONDA_ENVNAME = "fairseq"
 TOOLKIT_NAME = "fairseq"

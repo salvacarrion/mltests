@@ -1,17 +1,14 @@
-import sys
 import datetime
-import json
 import logging
 import os
 import random
-import time
 from pathlib import Path
 
 import pandas as pd
 
-from translation import utils
-from translation.autonmt import commands
-from translation.autonmt.toolkits import fairseq_entry, custom_entry
+from translation.autonmt_deprecated import utils
+from translation.autonmt_deprecated.autonmt import commands
+from translation.autonmt_deprecated.autonmt.toolkits import fairseq_entry, custom_entry
 
 # Global vars
 random.seed(123)
@@ -19,6 +16,13 @@ random.seed(123)
 
 def preprocess(toolkit, base_path, datasets, subword_model, vocab_size, force_overwrite, interactive):
     print(f"- Preprocess: (subword_model={subword_model}; vocab_size={vocab_size})")
+
+    # Select toolkit setup
+    toolkit_setup = {
+        "fairseq": {"preprocessor_fn": fairseq_entry.fairseq_preprocess},
+        "custom":  {"preprocessor_fn": custom_entry.custom_preprocess},
+    }
+    toolkit_setup = toolkit_setup[toolkit]
 
     # Preprocess datasets
     for ds in datasets:  # Training dataset
@@ -30,19 +34,20 @@ def preprocess(toolkit, base_path, datasets, subword_model, vocab_size, force_ov
                 # Get dataset path
                 ds_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair)
 
-                # Select toolkit
-                if toolkit == "fairseq":
-                    fairseq_entry.fairseq_preprocess(ds_path, src_lang, trg_lang, subword_model, vocab_size,
-                                                     force_overwrite, interactive=interactive)
-                elif toolkit == "custom":
-                    custom_entry.custom_preprocess(ds_path, src_lang, trg_lang, subword_model, vocab_size,
-                                                   force_overwrite, interactive=interactive)
-                else:
-                    raise NotImplementedError(f"Unknown toolkit: {toolkit}")
+                # Preprocess
+                toolkit_setup["preprocess_fn"](ds_path, src_lang, trg_lang, subword_model, vocab_size,
+                                               force_overwrite, interactive=interactive)
 
 
 def train(toolkit, base_path, datasets, run_name, subword_model, vocab_size, num_gpus, force_overwrite, interactive):
     print(f"- Train & Score: (run_name={run_name}, subword_model={subword_model}; vocab_size={vocab_size})")
+
+    # Select toolkit setup
+    toolkit_setup = {
+        "fairseq": {"train_fn": fairseq_entry.fairseq_train},
+        "custom":  {"train_fn": custom_entry.custom_train},
+    }
+    toolkit_setup = toolkit_setup[toolkit]
 
     # Parse gpu flag
     num_gpus = None if not num_gpus or num_gpus.strip().lower() == "all" else num_gpus
@@ -57,23 +62,15 @@ def train(toolkit, base_path, datasets, run_name, subword_model, vocab_size, num
                 # Get dataset path
                 ds_path = os.path.join(base_path, ds_name, ds_size_name, lang_pair)
 
-                # Select toolkit
-                if toolkit == "fairseq":
-                    fairseq_entry.fairseq_train(data_path=ds_path, run_name=run_name,
-                                                src_lang=src_lang, trg_lang=trg_lang, subword_model=subword_model,
-                                                vocab_size=vocab_size, model_path=None, num_gpus=num_gpus,
-                                                force_overwrite=force_overwrite, interactive=interactive)
-                elif toolkit == "custom":
-                    custom_entry.custom_train(data_path=ds_path, run_name=run_name,
-                                              src_lang=src_lang, trg_lang=trg_lang, subword_model=subword_model,
-                                              vocab_size=vocab_size, model_path=None, num_gpus=num_gpus,
-                                              force_overwrite=force_overwrite, interactive=interactive)
-                else:
-                    raise NotImplementedError(f"Unknown toolkit: {toolkit}")
+                # Train
+                toolkit_setup["train_fn"](data_path=ds_path, run_name=run_name,
+                                          src_lang=src_lang, trg_lang=trg_lang, subword_model=subword_model,
+                                          vocab_size=vocab_size, model_path=None, num_gpus=num_gpus,
+                                          force_overwrite=force_overwrite, interactive=interactive)
 
 
-def evaluate(toolkit, base_path, train_datasets, eval_datasets, run_name, subword_model, vocab_size, beams, metrics,
-             force_overwrite, interactive):
+def evaluate(toolkit, base_path, train_datasets, eval_datasets, run_name, subword_model, vocab_size, beams, max_length,
+             metrics, force_overwrite, interactive):
     print(f"- Evaluate models: (run_name={run_name}, subword_model={subword_model}; vocab_size={vocab_size})")
 
     # Evaluate models
@@ -95,14 +92,28 @@ def evaluate(toolkit, base_path, train_datasets, eval_datasets, run_name, subwor
                     evaluate_model(toolkit=toolkit, base_path=base_path, model_ds_path=model_ds_path,
                                    eval_datasets=eval_datasets, run_name=run_name,
                                    checkpoint_path=checkpoint_path, spm_model_path=spm_model_path, beams=beams,
-                                   subword_model=subword_model, vocab_size=vocab_size, metrics=metrics,
+                                   max_length=max_length, subword_model=subword_model, vocab_size=vocab_size, metrics=metrics,
                                    force_overwrite=force_overwrite, interactive=interactive)
 
 
 def evaluate_model(toolkit, base_path, model_ds_path, eval_datasets, run_name, checkpoint_path, spm_model_path, beams,
-                   subword_model, vocab_size, metrics, force_overwrite, interactive):
+                   max_length, subword_model, vocab_size, metrics, force_overwrite, interactive):
     # model_ds_path =>  Dataset path where the trained model can be found
     # eval_ds_path => Dataset path where the evaluations datasets can be found
+
+    toolkit_setup = {
+        "fairseq": {"preprocessor_fn": fairseq_entry.fairseq_preprocess_with_vocab,
+                    "translate_fn": fairseq_entry.fairseq_translate,
+                    "score_fn": custom_entry.custom_score,
+                    "vocab_fname": "dict.{}.txt"
+                    },
+        "custom":  {"preprocessor_fn": custom_entry._custom_preprocess,
+                    "translate_fn": custom_entry.custom_translate,
+                    "score_fn": custom_entry.custom_score,
+                    "vocab_fname": "spm_vocab.{}",
+                    },
+    }
+    toolkit_setup = toolkit_setup[toolkit]
 
     print(f"- Evaluate model: (run_name= {run_name}, checkpoint_path={checkpoint_path}, beams={str(beams)}])")
     for ds in eval_datasets:  # Dataset name (to evaluate)
@@ -138,81 +149,43 @@ def evaluate_model(toolkit, base_path, model_ds_path, eval_datasets, run_name, c
                         commands.spm_encode(spm_model_path=spm_model_path, input_file=ori_filename,
                                             output_file=new_filename)
 
-                # Select toolkit
-                if toolkit == "fairseq":
-                    # Get model's vocabulary
-                    vocab_path = os.path.join(model_ds_path, "models", toolkit, "data-bin", subword_model, str(vocab_size))
-                    src_vocab_path = os.path.join(vocab_path, f"dict.{src_lang}.txt")
-                    trg_vocab_path = os.path.join(vocab_path, f"dict.{trg_lang}.txt")
+                # Get model's vocabulary
+                vocab_path = os.path.join(model_ds_path, "models", toolkit, "data-bin", subword_model, str(vocab_size))
+                src_vocab_path = os.path.join(vocab_path, toolkit_setup["vocab_fname"].format(src_lang))
+                trg_vocab_path = os.path.join(vocab_path, toolkit_setup["vocab_fname"].format(trg_lang))
 
-                    # Preprocess data (extern => encoded files were copied here)
-                    eval_path = os.path.join(model_ds_path, "models", toolkit, "runs", run_name, "eval", eval_name)
-                    eval_data_path = os.path.join(eval_path, "data")
-                    eval_data_bin_path = os.path.join(eval_path, "data-bin")
+                # Preprocess data (extern => encoded files were copied here)
+                eval_path = os.path.join(model_ds_path, "models", toolkit, "runs", run_name, "eval", eval_name)
+                eval_data_path = os.path.join(eval_path, "data")
+                eval_data_bin_path = os.path.join(eval_path, "data-bin")
 
-                    # Process raw evaluation files
-                    if not force_overwrite and os.path.exists(eval_data_bin_path):
-                        print("=> Skipping preprocessing as the directory already exists")
-                    else:
-                        fairseq_entry.fairseq_preprocess_with_vocab(data_path=eval_data_path,
-                                                                    data_bin_path=eval_data_bin_path, src_lang=src_lang,
-                                                                    trg_lang=trg_lang, src_vocab_path=src_vocab_path,
-                                                                    trg_vocab_path=trg_vocab_path, train_fname="test",
-                                                                    val_fname=None)
-
-                    for beam_width in beams:
-                        # Create output path (if needed)
-                        beam_output_path = os.path.join(eval_path, "beams", f"beam_{beam_width}")
-                        path = Path(beam_output_path)
-                        path.mkdir(parents=True, exist_ok=True)
-
-                        # Translate & Score
-                        fairseq_entry.fairseq_translate(data_path=eval_data_bin_path, checkpoint_path=checkpoint_path,
-                                                        output_path=beam_output_path, src_lang=src_lang,
-                                                        trg_lang=trg_lang,
-                                                        subword_model=subword_model, spm_model_path=spm_model_path,
-                                                        force_overwrite=force_overwrite, beam_width=beam_width,
-                                                        score=True, metrics=metrics, interactive=interactive)
-
-                elif toolkit == "custom":
-                    # Get model's vocabulary
-                    vocab_path = os.path.join(model_ds_path, "models", toolkit, "data-bin", subword_model,
-                                              str(vocab_size))
-                    src_vocab_path = os.path.join(vocab_path, f"vocab.{src_lang}")
-                    trg_vocab_path = os.path.join(vocab_path, f"vocab.{trg_lang}")
-
-                    # Preprocess data (extern => encoded files were copied here)
-                    eval_path = os.path.join(model_ds_path, "models", toolkit, "runs", run_name, "eval", eval_name)
-                    eval_data_path = os.path.join(eval_path, "data")
-                    eval_data_bin_path = os.path.join(eval_path, "data-bin")
-
-                    # Process raw evaluation files
-                    if not force_overwrite and os.path.exists(eval_data_bin_path):
-                        print("=> Skipping preprocessing as the directory already exists")
-                    else:
-                        from translation.custom import preprocessor
-                        preprocessor.preprocess(destdir=eval_data_bin_path, src_lang=src_lang, trg_lang=trg_lang,
-                                                trainpref=None,
-                                                validpref=None,
-                                                testpref=os.path.join(eval_data_path, "test"),
-                                                src_vocab=src_vocab_path, trg_vocab=trg_vocab_path,
-                                                src_spm_model=spm_model_path, trg_spm_model=spm_model_path)
-
-                    for beam_width in beams:
-                        # Create output path (if needed)
-                        beam_output_path = os.path.join(eval_path, "beams", f"beam_{beam_width}")
-                        path = Path(beam_output_path)
-                        path.mkdir(parents=True, exist_ok=True)
-
-                        # Translate & Score
-                        custom_entry.custom_translate(data_path=eval_data_bin_path, checkpoint_path=checkpoint_path,
-                                                      output_path=beam_output_path, src_lang=src_lang,
-                                                      trg_lang=trg_lang,
-                                                      subword_model=subword_model, spm_model_path=spm_model_path,
-                                                      force_overwrite=force_overwrite, beam_width=beam_width,
-                                                      score=True, metrics=metrics, interactive=interactive)
+                # Preprocess raw evaluation files
+                if not force_overwrite and os.path.exists(eval_data_bin_path):
+                    print("=> Skipping preprocessing as the directory already exists")
                 else:
-                    raise NotImplementedError(f"Unknown toolkit: {toolkit}")
+                    toolkit_setup["preprocessor_fn"](destdir=eval_data_bin_path, src_lang=src_lang, trg_lang=trg_lang,
+                                                     src_vocab_path=src_vocab_path, trg_vocab_path=trg_vocab_path,
+                                                     train_fname=None, val_fname=None,
+                                                     test_fname=os.path.join(eval_data_path, "test"),
+                                                     src_spm_model_path=spm_model_path,
+                                                     trg_spm_model_path=spm_model_path)
+                for beam_width in beams:
+                    # Create output path (if needed)
+                    output_path = os.path.join(eval_path, "beams", f"beam_{beam_width}")
+                    path = Path(output_path)
+                    path.mkdir(parents=True, exist_ok=True)
+
+                    # Translate
+                    toolkit_setup["translate_fn"](data_path=eval_data_bin_path, checkpoint_path=checkpoint_path,
+                                                  output_path=output_path, src_lang=src_lang, trg_lang=trg_lang,
+                                                  beam_width=beam_width, max_length=max_length,
+                                                  force_overwrite=force_overwrite, interactive=interactive)
+
+                    # Score
+                    toolkit_setup["score_fn"](data_path=eval_data_bin_path, output_path=eval_data_bin_path,
+                                              src_lang=src_lang, trg_lang=trg_lang,
+                                              trg_spm_model_path=spm_model_path, metrics=metrics,
+                                              force_overwrite=force_overwrite, interactive=interactive)
 
 
 def create_report(output_path, metrics, force_overwrite):
@@ -315,7 +288,7 @@ def save_metrics(output_path, metrics):
 
 
 def plot_metrics(output_path, df_metrics, force_overwrite):
-    from translation.preprocess import plots
+    from translation.autonmt_deprecated.preprocess import plots
 
     SAVE_FIGURES = True
     SHOW_FIGURES = False
@@ -339,7 +312,7 @@ def plot_metrics(output_path, df_metrics, force_overwrite):
 
 
 def train_and_score(base_path, train_datasets, eval_datasets, run_name_prefix, subword_models, vocab_size, force_overwrite,
-                    interactive, toolkit, num_gpus, beams, metrics, output_path,
+                    interactive, toolkit, num_gpus, beams, max_length, metrics, output_path,
                     disable_preprocess=False, disable_train=False, disable_evaluate=False, disable_metrics=False,
                     disable_report=False):
     # Create logger
@@ -416,7 +389,8 @@ def train_and_score(base_path, train_datasets, eval_datasets, run_name_prefix, s
                 kwargs = {'toolkit': toolkit, 'base_path': base_path, 'train_datasets': train_datasets,
                           'eval_datasets': eval_datasets,
                           'run_name': run_name, 'subword_model': sw_model, 'vocab_size': voc_size, 'beams': beams,
-                          'metrics': metrics, 'force_overwrite': force_overwrite, 'interactive': interactive}
+                          'max_length': max_length, 'metrics': metrics, 'force_overwrite': force_overwrite,
+                          'interactive': interactive}
                 utils.logged_task(mylogger, row, "evaluate", evaluate, **kwargs)
 
             # Get metrics
@@ -470,6 +444,7 @@ if __name__ == "__main__":
     NUM_GPUS = 'all'  # all, 1gpu=[0]; 2gpu=[0,1];...
     TOOLKIT = "custom"  # or custom
     BEAMS = [1]
+    MAX_LENGTH = 150
     METRICS = {"bleu"}
     RUN_NAME_PREFIX = "mymodel"
     OUTPUT_PATH = os.path.join(BASE_PATH, "__outputs")
@@ -496,7 +471,7 @@ if __name__ == "__main__":
     train_and_score(base_path=BASE_PATH, train_datasets=TRAIN_DATASETS, eval_datasets=EVAL_DATASETS,
                     run_name_prefix=RUN_NAME_PREFIX, subword_models=SUBWORD_MODELS, vocab_size=VOCAB_SIZE,
                     force_overwrite=FORCE_OVERWRITE, interactive=INTERACTIVE,
-                    toolkit=TOOLKIT, num_gpus=NUM_GPUS, beams=BEAMS, metrics=METRICS, output_path=OUTPUT_PATH,
-                    disable_preprocess=True, disable_train=True, disable_evaluate=True, disable_metrics=False,
+                    toolkit=TOOLKIT, num_gpus=NUM_GPUS, beams=BEAMS, max_length=MAX_LENGTH, metrics=METRICS, output_path=OUTPUT_PATH,
+                    disable_preprocess=True, disable_train=True, disable_evaluate=False, disable_metrics=False,
                     disable_report=False
                     )

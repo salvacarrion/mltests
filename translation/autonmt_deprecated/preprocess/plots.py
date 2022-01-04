@@ -8,7 +8,7 @@ import seaborn as sns
 
 sns.set()
 
-from translation import utils
+from translation.autonmt_deprecated import utils
 
 
 def set_non_gui_backend():

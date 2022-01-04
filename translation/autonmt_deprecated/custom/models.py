@@ -5,16 +5,9 @@ import torch.nn as nn
 import torch.utils.data as tud
 import tqdm
 
-from translation.custom.dataset import TranslationDataset
-
 
 class Seq2Seq(nn.Module):
 
-    def print_architecture(self):
-        for k in self.architecture.keys():
-            print(f"{k.replace('_', ' ').capitalize()}: {self.architecture[k]}")
-        print(f"Trainable parameters: {sum([p.numel() for p in self.parameters()]):,}")
-        print()
 
     def fit(self, train_ds, val_ds, batch_size=128, max_tokens=None, max_epochs=5, learning_rate=1e-3, weight_decay=0,
             clip_norm=1.0, patience=10, criterion="cross_entropy", optimizer="adam", checkpoints_path=None,
