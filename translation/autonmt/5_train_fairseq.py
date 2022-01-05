@@ -15,16 +15,16 @@ from autonmt.modules.seq2seq import LitSeq2Seq
 from autonmt.modules.layers import PositionalEmbedding
 
 
-def main(fairseq_args):
+def main(fairseq_args, fairseq_args_pred):
     # Create preprocessing for training
     builder = DatasetBuilder(
         base_path="/home/scarrion/datasets/nn/translation",
         datasets=[
-            {"name": "multi30k", "languages": ["de-en"], "sizes": [("original", None)]},
+            {"name": "multi30k_test", "languages": ["de-en"], "sizes": [("original", None)]},
             # {"name": "europarl", "languages": ["de-en"], "sizes": [("100k", 100000)]},
         ],
-        subword_models=["unigram"],
-        vocab_sizes=[500, 1000],
+        subword_models=["word"],
+        vocab_sizes=[1000],
         merge_vocabs=False,
         force_overwrite=False,
         use_cmd=True,
@@ -43,8 +43,8 @@ def main(fairseq_args):
     for ds in tr_datasets:
         try:
             model = FairseqTranslator(force_overwrite=True, model_ds=ds, conda_fairseq_env_name="fairseq")
-            model.fit(max_epochs=1, patience=10, max_tokens=4096, seed=1234, num_workers=12, fairseq_args=fairseq_args)
-            m_scores = model.predict(ts_datasets, metrics={"bleu"}, beams=[1], max_gen_length=150)
+            model.fit(max_epochs=5, patience=10, seed=1234, num_workers=12, fairseq_args=fairseq_args)
+            m_scores = model.predict(ts_datasets, metrics={"bleu"}, beams=[1], max_gen_length=150, fairseq_args=fairseq_args_pred)
             scores.append(m_scores)
         except Exception as e:
             print(str(e))
@@ -73,7 +73,7 @@ if __name__ == "__main__":
         "--decoder-ffn-embed-dim 512",
         "--dropout 0.1",
 
-        # "--max-tokens 4096",
+        "--max-tokens 4096",
         "--no-epoch-checkpoints",
         "--maximize-best-checkpoint-metric",
         "--best-checkpoint-metric bleu",
@@ -83,6 +83,10 @@ if __name__ == "__main__":
         "--scoring sacrebleu",
         "--log-format simple",
         "--task translation",
+        # "--wandb-project fairseq",
     ]
 
-    main(fairseq_args=fairseq_cmd_args)
+    fairseq_cmd_args_pred = [
+        "--bpe sentencepiece"
+    ]
+    main(fairseq_args=fairseq_cmd_args, fairseq_args_pred=fairseq_cmd_args_pred)

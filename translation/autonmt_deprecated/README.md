@@ -78,6 +78,8 @@ train_and_score(base_path=BASE_PATH, train_datasets=TRAIN_DATASETS, eval_dataset
                 toolkit=TOOLKIT, num_gpus=NUM_GPUS, beams=BEAMS, metrics=METRICS)
 ```
 
+> Remove *.pt recursively: `find . -type f -name '*.pt' -delete`
+ 
 
 ## Layout for NLP tasks
 
