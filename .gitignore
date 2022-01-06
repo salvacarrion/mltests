@@ -1,5 +1,8 @@
 # Output path
 .outputs/
+*.csv
+*.pdf
+*.png
 
 # Development
 .idea/

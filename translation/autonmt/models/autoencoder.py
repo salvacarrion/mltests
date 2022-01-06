@@ -9,11 +9,15 @@ import pytorch_lightning as pl
 class LitAutoEncoder(pl.LightningModule):
     def __init__(self, input_dim, enc_dim):
         super().__init__()
-        self.encoder = nn.Sequential(nn.Linear(input_dim, enc_dim))
-        self.decoder = nn.Sequential(nn.Linear(enc_dim, input_dim))
+        self.mode = "encode"
+        self.encoder = nn.Sequential(nn.Linear(input_dim, enc_dim), nn.Tanh(), nn.Linear(enc_dim, enc_dim))
+        self.decoder = nn.Sequential(nn.Linear(enc_dim, enc_dim), nn.Tanh(), nn.Linear(enc_dim, input_dim))
 
     def forward(self, x):
-        embedding = self.encoder(x[0])
+        if self.mode == "encode":
+            embedding = self.encoder(x[0])
+        else:
+            embedding = self.decoder(x[0])
         return embedding
 
     def training_step(self, batch, batch_idx):

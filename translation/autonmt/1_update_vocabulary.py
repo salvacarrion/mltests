@@ -20,7 +20,7 @@ def load_model(ds, run_prefix):
     max_length = 100
     src_vocab = Vocabulary(max_tokens=max_length).build_from_ds(ds=ds, lang=ds.src_lang)
     trg_vocab = Vocabulary(max_tokens=max_length).build_from_ds(ds=ds, lang=ds.trg_lang)
-    model = Transformer(src_vocab_size=len(src_vocab), trg_vocab_size=len(trg_vocab), padding_idx=src_vocab.pad_id)
+    model = Transformer2(src_vocab_size=len(src_vocab), trg_vocab_size=len(trg_vocab), padding_idx=src_vocab.pad_id)
 
     # Load check point
     checkpoint_path = ds.get_model_checkpoints_path(toolkit="autonmt", run_name=ds.get_run_name(run_prefix),
@@ -101,7 +101,7 @@ def load_compressed_embeddings(filename, compressor, subword_size, src_emb, trg_
         src_emb = torch.nn.init.normal_(torch.zeros(subword_size, src_emb))
         trg_emb = torch.nn.init.normal_(torch.zeros(subword_size, trg_emb))
 
-    elif compressor in {"pca", "ae"}:
+    elif compressor in {"pca", "ae_linear", "ae_non_linear_tanh"}:
         src_emb = torch.tensor(np.load(os.path.join(filename, f"src_enc_{compressor}.npy")))
         trg_emb = torch.tensor(np.load(os.path.join(filename, f"trg_enc_{compressor}.npy")))
     return src_emb, trg_emb
@@ -118,10 +118,10 @@ def main():
         base_path="/home/scarrion/datasets/nn/translation",
         datasets=[
             {"name": "multi30k", "languages": ["de-en"], "sizes": [("original", None)]},
-            # {"name": "europarl", "languages": ["de-en"], "sizes": [("100k", 100000)]},
+            {"name": "europarl", "languages": ["de-en"], "sizes": [("100k", 100000)]},
         ],
         subword_models=["word"],
-        vocab_sizes=[1000, 2000, 4000, 8000],
+        vocab_sizes=[250, 500, 1000, 2000, 4000, 8000],
         merge_vocabs=False,
         force_overwrite=False,
         use_cmd=True,
@@ -142,13 +142,14 @@ def main():
     compressor = "ae"
 
     # # Export raw embeddings
+    # run_prefix = "transformer512emb"
     # for ds in tr_datasets:
     #     # Save embeddings
     #     model, src_vocab, trg_vocab = load_model(ds, run_prefix)
-    #     save_embeddings_models(model, f".outputs/tmp/256/{str(ds)}")
+    #     save_embeddings_models(model, f".outputs/tmp/512/{str(ds)}")
 
-    pairs = [(1000, 2000), (2000, 4000), (4000, 8000)]
-    compressors = ["random", "pca", "ae"]
+    pairs = [(250, 500), (500, 100), (1000, 2000), (2000, 4000), (4000, 8000)]
+    compressors = ["random", "pca", "ae_linear", "ae_non_linear_tanh"]
     rows = []
     for new_emb_size in [256, 512]:
         for sw_small, sw_big in pairs:
@@ -166,7 +167,7 @@ def main():
                     raise ValueError("Unknown compressor")
 
                 # Load small model and vocabs
-                run_prefix = "model256emb"
+                run_prefix = "transformer256emb"  # Don't change
                 _model, _src_vocab, _trg_vocab = load_model(ds_small, run_prefix)
 
                 # Expand model and vocabs
