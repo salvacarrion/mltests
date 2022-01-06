@@ -71,9 +71,17 @@
 #
 #     # Check if there is need for encoding
 #     if src_emb.shape[1] == trg_emb.shape[1] == enc_dim:
-#         new_src_emb, new_trg_emb = src_emb, trg_emb
-#         src_emb_rec, trg_emb_rec = src_emb, trg_emb
+#         src_scaler = StandardScaler().fit(src_emb)
+#         trg_scaler = StandardScaler().fit(trg_emb)
+#         src_emb_scaled = src_scaler.transform(src_emb)
+#         trg_emb_scaled = trg_scaler.transform(trg_emb)
 #
+#         # No encoding
+#         new_src_emb, new_trg_emb = src_emb_scaled, trg_emb_scaled
+#
+#         # Inverse scale
+#         src_emb_rec = src_scaler.inverse_transform(src_emb_scaled)
+#         trg_emb_rec = trg_scaler.inverse_transform(trg_emb_scaled)
 #     else:
 #         # Standarized
 #         src_scaler = StandardScaler().fit(src_emb)
@@ -126,7 +134,7 @@
 #     # Save embeddings
 #     rows = []
 #     origin_emb_size = 512
-#     name = "ae_non_linear_tanh"
+#     name = "ae_linear"
 #     for ds in tr_datasets:
 #         print(f"Encoding data for: {str(ds)}")
 #

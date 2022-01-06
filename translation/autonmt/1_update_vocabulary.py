@@ -14,13 +14,14 @@ import numpy as np
 from autonmt.bundle import utils
 from sklearn.decomposition import PCA
 import copy
+from sklearn.preprocessing import StandardScaler
 
 
 def load_model(ds, run_prefix):
     max_length = 100
     src_vocab = Vocabulary(max_tokens=max_length).build_from_ds(ds=ds, lang=ds.src_lang)
     trg_vocab = Vocabulary(max_tokens=max_length).build_from_ds(ds=ds, lang=ds.trg_lang)
-    model = Transformer2(src_vocab_size=len(src_vocab), trg_vocab_size=len(trg_vocab), padding_idx=src_vocab.pad_id)
+    model = Transformer(src_vocab_size=len(src_vocab), trg_vocab_size=len(trg_vocab), padding_idx=src_vocab.pad_id)
 
     # Load check point
     checkpoint_path = ds.get_model_checkpoints_path(toolkit="autonmt", run_name=ds.get_run_name(run_prefix),
@@ -30,7 +31,7 @@ def load_model(ds, run_prefix):
     return model, src_vocab, trg_vocab
 
 
-def expand_model(model, small_src_vocab, small_trg_vocab, big_ds, src_emb, trg_emb):
+def expand_model(model, small_src_vocab, small_trg_vocab, big_ds, src_emb, trg_emb, comp):
     max_length = 100
     big_src_vocab = Vocabulary(max_tokens=max_length).build_from_ds(ds=big_ds, lang=big_ds.src_lang)
     big_trg_vocab = Vocabulary(max_tokens=max_length).build_from_ds(ds=big_ds, lang=big_ds.trg_lang)
@@ -41,11 +42,15 @@ def expand_model(model, small_src_vocab, small_trg_vocab, big_ds, src_emb, trg_e
     small_src_emb = model.src_embeddings.weight.detach()
     small_trg_emb = model.trg_embeddings.weight.detach()
 
+    # Compute mean and std
+    src_small_scaler = StandardScaler().fit(small_src_emb.numpy())
+    trg_small_scaler = StandardScaler().fit(trg_emb.numpy())
+
     # Get sizes
     src_big_voc_size, src_small_voc_size, src_voc_dim = len(big_src_vocab), small_src_emb.shape[0], small_src_emb.shape[1]
     trg_big_voc_size, trg_small_voc_size, trg_voc_dim = len(big_trg_vocab), small_trg_emb.shape[0], small_trg_emb.shape[1]
 
-    # Match vocabularie
+    # Match vocabularies
     words_small_src_vocab = small_src_vocab.get_tokens()
     words_small_trg_vocab = small_trg_vocab.get_tokens()
     words_big_src_vocab = big_src_vocab.get_tokens()
@@ -68,16 +73,32 @@ def expand_model(model, small_src_vocab, small_trg_vocab, big_ds, src_emb, trg_e
     # Add new embeddings
     src_idxs = src_emb[torch.tensor(src_big_sorted_missing_idxs)]
     trg_idxs = trg_emb[torch.tensor(trg_big_sorted_missing_idxs)]
-    new_src_emb[src_small_voc_size:, :] = torch.tensor(src_idxs, device=device, dtype=dtype)
-    new_trg_emb[trg_small_voc_size:, :] = torch.tensor(trg_idxs, device=device, dtype=dtype)
+    src_big_tmp = torch.tensor(src_idxs, device=device, dtype=dtype)
+    trg_big_tmp = torch.tensor(trg_idxs, device=device, dtype=dtype)
+
+    # Re-scale new tensors (if needed)
+    if comp in {"random"}:  # Do not scale for random
+        src_big_rescaled, trg_big_rescaled = src_big_tmp, trg_big_tmp
+    else:
+        # Standarize new tensors (it's already standarize, although since X values have been select, its stats are shifted)
+        # src_big_tmp = StandardScaler().fit_transform(src_big_tmp.numpy())
+        # trg_big_tmp = StandardScaler().fit_transform(trg_big_tmp.numpy())
+
+        # Rescale new tensors
+        src_big_rescaled = src_small_scaler.inverse_transform(src_big_tmp)
+        trg_big_rescaled = trg_small_scaler.inverse_transform(trg_big_tmp)
+
+    # Inverse transform but with the previous model stats
+    new_src_emb[src_small_voc_size:, :] = torch.tensor(src_big_rescaled, device=device, dtype=dtype)
+    new_trg_emb[trg_small_voc_size:, :] = torch.tensor(trg_big_rescaled, device=device, dtype=dtype)
 
     # Convert embedding to parameter
     model.src_embeddings.weight = torch.nn.parameter.Parameter(new_src_emb)
     model.trg_embeddings.weight = torch.nn.parameter.Parameter(new_trg_emb)
 
     # Create new vocabs from tokens
-    big_src_vocab = Vocabulary(max_tokens=max_length).build_from_tokens([(tok, 0) for tok in final_big_src_vocab])
-    big_trg_vocab = Vocabulary(max_tokens=max_length).build_from_tokens([(tok, 0) for tok in final_big_trg_vocab])
+    big_src_vocab = Vocabulary(max_tokens=max_length).build_from_tokens([(tok.replace('▁', ''), 0) for tok in final_big_src_vocab])
+    big_trg_vocab = Vocabulary(max_tokens=max_length).build_from_tokens([(tok.replace('▁', ''), 0) for tok in final_big_trg_vocab])
 
     return model, big_src_vocab, big_trg_vocab
 
@@ -100,8 +121,7 @@ def load_compressed_embeddings(filename, compressor, subword_size, src_emb, trg_
         # Initialize embeddings
         src_emb = torch.nn.init.normal_(torch.zeros(subword_size, src_emb))
         trg_emb = torch.nn.init.normal_(torch.zeros(subword_size, trg_emb))
-
-    elif compressor in {"pca", "ae_linear", "ae_non_linear_tanh"}:
+    else:  # standarized
         src_emb = torch.tensor(np.load(os.path.join(filename, f"src_enc_{compressor}.npy")))
         trg_emb = torch.tensor(np.load(os.path.join(filename, f"trg_enc_{compressor}.npy")))
     return src_emb, trg_emb
@@ -118,7 +138,7 @@ def main():
         base_path="/home/scarrion/datasets/nn/translation",
         datasets=[
             {"name": "multi30k", "languages": ["de-en"], "sizes": [("original", None)]},
-            {"name": "europarl", "languages": ["de-en"], "sizes": [("100k", 100000)]},
+            # {"name": "europarl", "languages": ["de-en"], "sizes": [("100k", 100000)]},
         ],
         subword_models=["word"],
         vocab_sizes=[250, 500, 1000, 2000, 4000, 8000],
@@ -142,51 +162,53 @@ def main():
     compressor = "ae"
 
     # # Export raw embeddings
-    # run_prefix = "transformer512emb"
+    # run_prefix = "transformer256emb"
     # for ds in tr_datasets:
     #     # Save embeddings
     #     model, src_vocab, trg_vocab = load_model(ds, run_prefix)
-    #     save_embeddings_models(model, f".outputs/tmp/512/{str(ds)}")
+    #     save_embeddings_models(model, f".outputs/tmp/256/{str(ds)}")
 
-    pairs = [(250, 500), (500, 100), (1000, 2000), (2000, 4000), (4000, 8000)]
-    compressors = ["random", "pca", "ae_linear", "ae_non_linear_tanh"]
+    pairs = [(250, 8000)]
+    compressors = ["random", "ae_linear"]
     rows = []
-    for new_emb_size in [256, 512]:
+    for origin_emb_size in [256]:
         for sw_small, sw_big in pairs:
             # Get datasets
             ds_small = get_dataset(tr_datasets, sw_small)
             ds_big = get_dataset(tr_datasets, sw_big)
+            assert ds_small.dataset_name == ds_big.dataset_name
+            assert ds_small.subword_model == ds_big.subword_model
 
             for comp in compressors:
                 # Compress vector
                 if comp in {"random"}:
-                    src_emb, trg_emb = load_compressed_embeddings(f".outputs/tmp/{new_emb_size}/{str(ds_big)}", comp, subword_size=sw_big, src_emb=256, trg_emb=256)
-                elif comp in {"pca", "ae"}:
-                    src_emb, trg_emb = load_compressed_embeddings(f".outputs/tmp/{new_emb_size}/{str(ds_big)}", comp, subword_size=sw_big, src_emb=256, trg_emb=256)
+                    src_emb, trg_emb = load_compressed_embeddings(f".outputs/tmp/{origin_emb_size}/{str(ds_big)}", comp, subword_size=sw_big, src_emb=256, trg_emb=256)
                 else:
-                    raise ValueError("Unknown compressor")
+                    src_emb, trg_emb = load_compressed_embeddings(f".outputs/tmp/{origin_emb_size}/{str(ds_big)}", comp, subword_size=sw_big, src_emb=256, trg_emb=256)
 
                 # Load small model and vocabs
-                run_prefix = "transformer256emb"  # Don't change
+                run_prefix = "transformer256emb"  # Don't change it
+                ds_small.subword_model = "word"
                 _model, _src_vocab, _trg_vocab = load_model(ds_small, run_prefix)
 
                 # Expand model and vocabs
-                model, src_vocab, trg_vocab = expand_model(_model, _src_vocab, _trg_vocab, ds_big, src_emb, trg_emb)
+                model, src_vocab, trg_vocab = expand_model(_model, _src_vocab, _trg_vocab, ds_big, src_emb, trg_emb, comp)
                 model = model.to(device)
 
                 # Test model
-                model = AutonmtTranslator(model=model, model_ds=ds_small,  src_vocab=src_vocab, trg_vocab=trg_vocab,run_prefix=run_prefix,  force_overwrite=True)
+                ds_small.subword_model = "none"
+                model = AutonmtTranslator(model=model, model_ds=ds_small,  src_vocab=src_vocab, trg_vocab=trg_vocab,run_prefix=run_prefix, force_overwrite=True)
                 m_scores = model.predict(eval_datasets=ts_datasets, metrics={"bleu"}, beams=[1], max_gen_length=max_tokens)
 
                 # Keep results
                 bleu = m_scores[0]['beams']['beam1']['sacrebleu_bleu_score']
-                row = {"sw_small": sw_small, "sw_big": sw_big, "new_emb_size": new_emb_size, "compressor": comp, "bleu": bleu}
+                row = {"dataset_name": ds_small.dataset_name, "subword_model": ds_small.subword_model,"sw_small": sw_small, "sw_big": sw_big, "origin_emb_size": origin_emb_size, "compressor": comp, "bleu": bleu}
                 rows.append(row)
                 print(row)
 
     # Create pandas dataframe
     df = pd.DataFrame(rows)
-    df.to_csv("results.csv", index=False)
+    df.to_csv("europarl_results.csv", index=False)
     print(df)
 
 

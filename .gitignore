@@ -3,6 +3,7 @@
 *.csv
 *.pdf
 *.png
+*.zip
 
 # Development
 .idea/

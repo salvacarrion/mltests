@@ -10,8 +10,8 @@ class LitAutoEncoder(pl.LightningModule):
     def __init__(self, input_dim, enc_dim):
         super().__init__()
         self.mode = "encode"
-        self.encoder = nn.Sequential(nn.Linear(input_dim, enc_dim), nn.Tanh(), nn.Linear(enc_dim, enc_dim))
-        self.decoder = nn.Sequential(nn.Linear(enc_dim, enc_dim), nn.Tanh(), nn.Linear(enc_dim, input_dim))
+        self.encoder = nn.Sequential(nn.Linear(input_dim, enc_dim))
+        self.decoder = nn.Sequential(nn.Linear(enc_dim, input_dim))
 
     def forward(self, x):
         if self.mode == "encode":

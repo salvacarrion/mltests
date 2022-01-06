@@ -21,15 +21,15 @@ def main():
     builder = DatasetBuilder(
         base_path="/home/scarrion/datasets/nn/translation",
         datasets=[
-            # {"name": "multi30k", "languages": ["de-en"], "sizes": [("original", None)]},
+            {"name": "multi30k", "languages": ["de-en"], "sizes": [("original", None)]},
             {"name": "europarl", "languages": ["de-en"], "sizes": [("100k", 100000)]},
         ],
         subword_models=["word"],
-        vocab_sizes=[250, 500, 1000, 2000, 4000, 8000],
+        vocab_sizes=[4000],
         merge_vocabs=False,
         force_overwrite=False,
         use_cmd=True,
-        eval_mode="same",
+        eval_mode="compatible",
         conda_env_name="mltests",
         letter_case="lower",
     ).build(make_plots=False, safe=True)
@@ -43,22 +43,22 @@ def main():
     errors = []
     run_prefix = "transformer256emb"
     for ds in tr_datasets:
-        try:
-            # Instantiate vocabs and model
-            src_vocab = Vocabulary(max_tokens=100).build_from_ds(ds=ds, lang=ds.src_lang)
-            trg_vocab = Vocabulary(max_tokens=100).build_from_ds(ds=ds, lang=ds.trg_lang)
-            model = Transformer(src_vocab_size=len(src_vocab), trg_vocab_size=len(trg_vocab), padding_idx=src_vocab.pad_id)
+        # try:
+        # Instantiate vocabs and model
+        src_vocab = Vocabulary(max_tokens=100).build_from_ds(ds=ds, lang=ds.src_lang)
+        trg_vocab = Vocabulary(max_tokens=100).build_from_ds(ds=ds, lang=ds.trg_lang)
+        model = Transformer(src_vocab_size=len(src_vocab), trg_vocab_size=len(trg_vocab), padding_idx=src_vocab.pad_id)
 
-            # Train model
-            # wandb_params = None
-            wandb_params = None #dict(project="autonmt-tests", entity="salvacarrion")
-            model = AutonmtTranslator(model=model, model_ds=ds, src_vocab=src_vocab, trg_vocab=trg_vocab, run_prefix=run_prefix, wandb_params=wandb_params, force_overwrite=False)
-            # model.fit(max_epochs=100, batch_size=512, seed=1234, num_workers=12, patience=10, strategy="dp")
-            m_scores = model.predict(ts_datasets, metrics={"bleu"}, beams=[1], max_gen_length=150)
-            scores.append(m_scores)
-        except Exception as e:
-            print(str(e))
-            errors += [str(e)]
+        # Train model
+        # wandb_params = None
+        wandb_params = None #dict(project="autonmt-tests", entity="salvacarrion")
+        model = AutonmtTranslator(model=model, model_ds=ds, src_vocab=src_vocab, trg_vocab=trg_vocab, run_prefix=run_prefix, wandb_params=wandb_params, force_overwrite=False)
+        # model.fit(max_epochs=100, batch_size=512, seed=1234, num_workers=12, patience=10, strategy="dp")
+        m_scores = model.predict(ts_datasets, metrics={"bleu"}, beams=[1], max_gen_length=100, load_best_checkpoint=True)
+        scores.append(m_scores)
+        # except Exception as e:
+        #     print(str(e))
+        #     errors += [str(e)]
 
     # Make report and print it
     output_path = f".outputs/autonmt/{str(datetime.datetime.now())}/{run_prefix}"

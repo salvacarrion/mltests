@@ -20,11 +20,11 @@ def main(fairseq_args, fairseq_args_pred):
     builder = DatasetBuilder(
         base_path="/home/scarrion/datasets/nn/translation",
         datasets=[
-            {"name": "multi30k_test", "languages": ["de-en"], "sizes": [("original", None)]},
-            # {"name": "europarl", "languages": ["de-en"], "sizes": [("100k", 100000)]},
+            {"name": "multi30k", "languages": ["de-en"], "sizes": [("original", None)]},
+            {"name": "europarl", "languages": ["de-en"], "sizes": [("100k", 100000)]},
         ],
         subword_models=["word"],
-        vocab_sizes=[1000],
+        vocab_sizes=[4000],
         merge_vocabs=False,
         force_overwrite=False,
         use_cmd=True,
@@ -43,8 +43,8 @@ def main(fairseq_args, fairseq_args_pred):
     for ds in tr_datasets:
         try:
             model = FairseqTranslator(force_overwrite=True, model_ds=ds, conda_fairseq_env_name="fairseq")
-            model.fit(max_epochs=5, patience=10, seed=1234, num_workers=12, fairseq_args=fairseq_args)
-            m_scores = model.predict(ts_datasets, metrics={"bleu"}, beams=[1], max_gen_length=150, fairseq_args=fairseq_args_pred)
+            # model.fit(max_epochs=5, patience=10, seed=1234, num_workers=12, fairseq_args=fairseq_args)
+            m_scores = model.predict(ts_datasets, metrics={"bleu"}, beams=[5], max_gen_length=150, fairseq_args=fairseq_args_pred)
             scores.append(m_scores)
         except Exception as e:
             print(str(e))

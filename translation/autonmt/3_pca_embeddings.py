@@ -31,6 +31,7 @@
 #     d = {"r2": r2, "rmse": rmse, "nrmse": nrmse}
 #     return d
 #
+#
 # def encode_data(filename, enc_dim, name=""):
 #     # Save embeddings
 #     src_emb = np.load(os.path.join(filename, "src.npy"))
@@ -38,8 +39,17 @@
 #
 #     # Check if there is need for encoding
 #     if src_emb.shape[1] == trg_emb.shape[1] == enc_dim:
-#         new_src_emb, new_trg_emb = src_emb, trg_emb
-#         src_emb_rec, trg_emb_rec = src_emb, trg_emb
+#         src_scaler = StandardScaler().fit(src_emb)
+#         trg_scaler = StandardScaler().fit(trg_emb)
+#         src_emb_scaled = src_scaler.transform(src_emb)
+#         trg_emb_scaled = trg_scaler.transform(trg_emb)
+#
+#         # No encoding
+#         new_src_emb, new_trg_emb = src_emb_scaled, trg_emb_scaled
+#
+#         # Inverse scale
+#         src_emb_rec = src_scaler.inverse_transform(src_emb_scaled)
+#         trg_emb_rec = trg_scaler.inverse_transform(trg_emb_scaled)
 #     else:
 #         # Standarized
 #         src_scaler = StandardScaler().fit(src_emb)
@@ -82,7 +92,7 @@
 #             {"name": "europarl", "languages": ["de-en"], "sizes": [("100k", 100000)]},
 #         ],
 #         subword_models=["word"],
-#         vocab_sizes=[500, 1000, 2000, 4000, 8000],
+#         vocab_sizes=[250, 500, 1000, 2000, 4000, 8000],
 #         merge_vocabs=False,
 #         force_overwrite=False,
 #         use_cmd=True,
@@ -97,7 +107,7 @@
 #
 #     # Save embeddings
 #     rows = []
-#     origin_emb_size = 512
+#     origin_emb_size = 256
 #     name = "pca"
 #     for ds in tr_datasets:
 #         print(f"Encoding data for: {str(ds)}")
