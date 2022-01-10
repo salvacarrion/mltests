@@ -17,6 +17,29 @@ from sklearn.decomposition import PCA
 import copy
 from sklearn.preprocessing import StandardScaler
 
+import torch
+import random
+import numpy as np
+from pytorch_lightning.utilities.seed import seed_everything
+
+# Define seed
+
+# Set seeds
+seed=1234
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+seed_everything(seed)
+
+# Tricky: https://pytorch.org/docs/stable/generated/torch.use_deterministic_algorithms.html
+# torch.use_deterministic_algorithms(True)
+
+# Test randomness
+print(f"\t- [INFO]: Testing random seed ({seed}):")
+print(f"\t\t- random: {random.random()}")
+print(f"\t\t- numpy: {np.random.rand(1)}")
+print(f"\t\t- torch: {torch.rand(1)}")
+
 
 def load_model(ds, run_prefix):
     max_length = 100
@@ -97,9 +120,26 @@ def expand_model(model, small_src_vocab, small_trg_vocab, big_ds, src_emb, trg_e
     model.src_embeddings.weight = torch.nn.parameter.Parameter(new_src_emb)
     model.trg_embeddings.weight = torch.nn.parameter.Parameter(new_trg_emb)
 
+    # Modify output layer
+    new_output = torch.nn.Linear(model.output_layer.in_features, trg_big_voc_size, device=device, dtype=dtype)
+    new_output_weights = new_output.weight.detach()
+    new_output_bias = new_output.bias.detach()
+    new_output_weights[:src_small_voc_size, :] = model.output_layer.weight.detach()
+    new_output_bias[:src_small_voc_size] = model.output_layer.bias.detach()
+    new_output.weight = torch.nn.parameter.Parameter(new_output_weights)
+    new_output.bias = torch.nn.parameter.Parameter(new_output_bias)
+    model.output_layer = new_output
+
+    if comp != "random":
+        print("******************* Freezing embedding layers *********************")
+        for p in model.src_embeddings.parameters():
+            p.requires_grad = False
+        for p in model.trg_embeddings.parameters():
+            p.requires_grad = False
+
     # Create new vocabs from tokens
-    big_src_vocab = Vocabulary(max_tokens=max_length).build_from_tokens([(tok.replace('▁', ''), 0) for tok in final_big_src_vocab])
-    big_trg_vocab = Vocabulary(max_tokens=max_length).build_from_tokens([(tok.replace('▁', ''), 0) for tok in final_big_trg_vocab])
+    big_src_vocab = Vocabulary(max_tokens=max_length).build_from_tokens([(tok, 0) for tok in final_big_src_vocab])
+    big_trg_vocab = Vocabulary(max_tokens=max_length).build_from_tokens([(tok, 0) for tok in final_big_trg_vocab])
 
     return model, big_src_vocab, big_trg_vocab
 
@@ -138,8 +178,8 @@ def main():
     builder = DatasetBuilder(
         base_path="/home/scarrion/datasets/nn/translation",
         datasets=[
-            {"name": "multi30k", "languages": ["de-en"], "sizes": [("original", None)]},
-            # {"name": "europarl", "languages": ["de-en"], "sizes": [("100k", 100000)]},
+            # {"name": "multi30k", "languages": ["de-en"], "sizes": [("original", None)]},
+            {"name": "europarl", "languages": ["de-en"], "sizes": [("100k", 100000)]},
         ],
         subword_models=["word"],
         vocab_sizes=[250, 500, 1000, 2000, 4000, 8000],
@@ -169,10 +209,10 @@ def main():
     #     model, src_vocab, trg_vocab = load_model(ds, run_prefix)
     #     save_embeddings_models(model, f".outputs/tmp/256/{str(ds)}")
 
-    pairs = [(250, 8000)]
+    pairs = [(250, 500), (500, 1000), (1000, 2000), (2000, 4000), (4000, 8000)]
     compressors = ["random", "ae_linear"]
     rows = []
-    for origin_emb_size in [256]:
+    for origin_emb_size in [256, 512]:
         for sw_small, sw_big in pairs:
             # Get datasets
             ds_small = get_dataset(tr_datasets, sw_small)
@@ -182,34 +222,37 @@ def main():
 
             for comp in compressors:
                 # Compress vector
-                if comp in {"random"}:
-                    src_emb, trg_emb = load_compressed_embeddings(f".outputs/tmp/{origin_emb_size}/{str(ds_big)}", comp, subword_size=sw_big, src_emb=256, trg_emb=256)
-                else:
+                if comp in {"random", "ae_linear"}:
                     src_emb, trg_emb = load_compressed_embeddings(f".outputs/tmp/{origin_emb_size}/{str(ds_big)}", comp, subword_size=sw_big, src_emb=256, trg_emb=256)
 
                 # Load small model and vocabs
-                run_prefix = "transformer256emb"  # Don't change it
-                ds_small.subword_model = "word"
+                run_prefix = f"transformer256emb"  # Don't change it
                 _model, _src_vocab, _trg_vocab = load_model(ds_small, run_prefix)
+                run_prefix += f"_zr_oes{origin_emb_size}_c{comp}_{sw_small}-{sw_big}"
 
                 # Expand model and vocabs
+                model, src_vocab, trg_vocab = _model, _src_vocab, _trg_vocab
                 model, src_vocab, trg_vocab = expand_model(_model, _src_vocab, _trg_vocab, ds_big, src_emb, trg_emb, comp)
                 model = model.to(device)
 
                 # Test model
                 ds_small.subword_model = "none"
-                model = AutonmtTranslator(model=model, model_ds=ds_small,  src_vocab=src_vocab, trg_vocab=trg_vocab,run_prefix=run_prefix, force_overwrite=True)
+                wandb_params = None  #dict(project="autonmt-tests", entity="salvacarrion")
+                model = AutonmtTranslator(model=model, model_ds=ds_small,  src_vocab=src_vocab, trg_vocab=trg_vocab, wandb_params=wandb_params, run_prefix=run_prefix, force_overwrite=True)
+                model.fit(max_epochs=1, learning_rate=0.0001, optimizer="sgd", batch_size=128, seed=1234, num_workers=0, patience=10)
                 m_scores = model.predict(eval_datasets=ts_datasets, metrics={"bleu"}, beams=[1], max_gen_length=max_tokens)
+                ds_small.subword_model = "word"
 
                 # Keep results
                 bleu = m_scores[0]['beams']['beam1']['sacrebleu_bleu_score']
-                row = {"dataset_name": ds_small.dataset_name, "subword_model": ds_small.subword_model,"sw_small": sw_small, "sw_big": sw_big, "origin_emb_size": origin_emb_size, "compressor": comp, "bleu": bleu}
+                row = {"dataset_name": ds_small.dataset_name, "subword_model": ds_small.subword_model, "from_to": f"{sw_small}➔{sw_big}", "origin_emb_size": origin_emb_size, "compressor": comp, "bleu": bleu}
                 rows.append(row)
                 print(row)
+                asd = 3
 
     # Create pandas dataframe
     df = pd.DataFrame(rows)
-    df.to_csv("europarl_results.csv", index=False)
+    df.to_csv("europarl_1_ep.csv", index=False)
     print(df)
 
 
