@@ -209,7 +209,7 @@ def main():
     #     model, src_vocab, trg_vocab = load_model(ds, run_prefix)
     #     save_embeddings_models(model, f".outputs/tmp/256/{str(ds)}")
 
-    pairs = [(250, 500), (500, 1000), (1000, 2000), (2000, 4000), (4000, 8000)]
+    pairs = [(250, 500)]
     compressors = ["random", "ae_linear"]
     rows = []
     for origin_emb_size in [256, 512]:

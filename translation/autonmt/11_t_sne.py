@@ -13,9 +13,13 @@ from sklearn.manifold import TSNE
 
 from autonmt.bundle import utils
 
-main_words = ["<unk>","<s>","</s>","<pad>","a",".","in","the","on","man","is","and","of","with","woman",",","two","are","to","people","at","an","wearing","young","white","shirt","black","his","while","blue","men","sitting","girl","red","boy","dog","standing","playing","group","street","down","walking","front","her","holding","one","water","three","by","women","green","little","up","for","child","looking","outside","as","large","through","yellow","children","brown","person","from","their","ball","hat","into","small","next","other","dressed","some","out","over","building","riding","running","near","jacket","another","around","sidewalk","field","orange","crowd","beach","stands","pink","sits","jumping","behind","table","grass","background","snow","bike","stand","city","&apos;s","girls","air","player","asian","looks","wall","top","dogs","several","that","older","four","off","dress","camera","park","talking","lady","something","soccer","along","walks","guitar","boys","hair","play","together","working","food","smiling","gray","picture","has","game","plays","car","holds","hand","it","road","him","bench","glasses","pants","old","shorts","stage","sit","carrying","walk","baby","couple","them","bicycle","side","face","&quot;","male","tree","pool","race","taking","rock","each","doing","across","watching","guy","dirt","head","jeans","there","area","blond","jumps","boat","hands","female","day","ground","performing","room","back","baseball","who","eating","being","football","coat","using","kids","suit","under","band","striped","watch","many","horse","mouth","purple","he","sign","store","long","this","runs","sand","tennis","players","construction","look","sunglasses","reading","clothing","microphone","mountain","basketball","dark","ocean","toy","during","its","workers","middle","watches","t-shirt","uniform","climbing","past","elderly","restaurant","against","helmet","team","train","dancing","window","rides","they","about","chair","work","be","posing","trees","having","outdoor","wooden","covered","five","waiting","swimming","all","getting","or","floor","trying","very","colorful","skateboard","bag","busy","ice","fence","singing","shirts","jump","laying","line","hill","market","cart","book","bright","hats","inside","ride","tan","truck","cap","kitchen","others","cellphone","path","big","grassy","high","someone","making","bus","clothes","motorcycle","takes","umbrella","outfit","towards","enjoying","full","night","track","body","brick","light","metal","river","swing","paper","ready","she","tank","shop","open","piece","sweater","trick","above","worker","lake","adults","going","painting","colored","music","dance","hard","snowy","run","shopping","surrounded","wave","onto","uniforms","vest","outdoors","stick","photo","stone","backpack","beside","crowded","smiles","board","kid","african","drinking","gear","subway","family","hockey","phone","pole","american","house","toddler","event","gathered","guys","hanging","police","arms","bridge","catch","flowers","set","beautiful","preparing","away","fire","costume","leaning","object","sleeping","after","steps","fishing","lot","machine","fountain","plaid","rope","bar","shirtless","adult","take","like","stairs","rocks","shoes","arm","graffiti","selling","sunny","does","forest","parade","racing","setting","chairs","pose","tall","both","putting","volleyball","corner","frisbee","glass","pushing","throwing","between","drink","have","ladies","slide","computer","laughing","public","short","equipment","flag","instruments","couch","pictures","cowboy","party","plastic","ramp","wood","playground","poses","sweatshirt","trail","view","which","woods","beard","concrete","fish","statue","sun","dock","midair","winter","yard","number","bikes","seated","skirt","attire","just","reads","toward","beer","cooking","distance","get","what","works","blond-hair","cutting","rider","six","bags","buildings","left","pulling","school","vests","where","cream","middle-aged","appears","bed","cliff","skateboarder","sky","station","cross","crossing","edge","few","friends","instrument","mountains","showing","spectators","cars","horses","jersey","mother","tent","bearded","court","filled","make","nearby","performs","right","scarf","apron"]
-main_words = set(main_words[:int(len(main_words)/2)])
-
+main_words = ["man", "woman", "lady", "young", "old", "children",
+              "jacket", "shirt", "hat", "dress",
+              "dog", "cat", "bird", "mouse",
+              "running", "soccer", "player",
+              "on", "over", "in", "for", "to"]
+# main_words = set(main_words[:int(len(main_words)/4)])
+print(f"total words: {len(main_words)}")
 
 def main():
     file = "trg"
@@ -25,11 +29,11 @@ def main():
     builder = DatasetBuilder(
         base_path="/home/scarrion/datasets/nn/translation",
         datasets=[
-            # {"name": "multi30k", "languages": ["de-en"], "sizes": [("original", None)]},
+            {"name": "multi30k", "languages": ["de-en"], "sizes": [("original", None)]},
             {"name": "europarl", "languages": ["de-en"], "sizes": [("100k", 100000)]},
         ],
         subword_models=["word"],
-        vocab_sizes=[250, 500, 1000, 2000, 4000, 8000],
+        vocab_sizes=[500, 1000, 2000, 4000, 8000],
         merge_vocabs=False,
         force_overwrite=False,
         use_cmd=True,
@@ -43,7 +47,7 @@ def main():
     ts_datasets = builder.get_ds(ignore_variants=True)
 
     train_tsne = False
-    file = "trg"
+    file = "trg_enc_pca"
     for origin_emb_size in [256, 512]:
         for ds in tr_datasets:
             base_path = f".outputs/tmp/{origin_emb_size}/{str(ds)}"
@@ -76,7 +80,7 @@ def main():
                 for i, row in data.iterrows():
                     word = row["label"].replace('▁', '')
                     if word in main_words:
-                        g.annotate(word, (row["f1"], row["f2"]), fontsize=8*scale)
+                        g.annotate(word, (row["f1"], row["f2"]), fontsize=14)
                 plt.tight_layout()
 
                 # Print plot
@@ -87,7 +91,7 @@ def main():
                     plt.savefig(path, dpi=300)
                     print(f"Plot saved! ({path})")
 
-                # plt.show()
+                plt.show()
                 plt.close()
                 asdas = 3
 

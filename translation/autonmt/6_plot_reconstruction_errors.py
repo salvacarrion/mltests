@@ -19,11 +19,11 @@ from autonmt.modules.layers import PositionalEmbedding
 
 
 def main():
-    for dataset in ["Multi30K", "Europarl"]:
+    for dataset in ["Multi30K"]:
         for lang, lang_code in [("de", "src"), ("en", "trg")]:
-            df_pca = pd.read_csv(".outputs/tmp/512/pca_512.csv")
-            df_ae_linear = pd.read_csv(".outputs/tmp/512/ae_linear_512.csv")
-            df_ae_non_linear = pd.read_csv(".outputs/tmp/512/ae_non_linear_tanh_512.csv")
+            df_pca = pd.read_csv(".outputs/tmp/300/pca_300.csv")
+            df_ae_linear = pd.read_csv(".outputs/tmp/300/ae_linear_300.csv")
+            df_ae_non_linear = pd.read_csv(".outputs/tmp/300/ae_non_linear_tanh_300.csv")
             df_pca["model"] = "PCA"
             df_ae_linear["model"] = "AE (Linear)"
             df_ae_non_linear["model"] = "AE (Non-linear)"
@@ -36,9 +36,10 @@ def main():
 
             # Properties
 
-            ax.set_title(f"{dataset} ({lang}): Reconstruction Error (512↔256)")
+            ax.set_title(f"Glove (en): Reconstruction Error (300↔256)")
             ax.set_xlabel("Vocab. size")
             ax.set_ylabel("R²")
+            # ax.set_ylim(0, None)
             ax.legend(title='Models')
             plt.tight_layout()
 
@@ -48,7 +49,7 @@ def main():
 
             # Save graphs
             for ext in ["png", "pdf"]:
-                plt.savefig(f".outputs/tmp/512/{dataset.lower()}_r2_512_{lang}.{ext}", dpi=150)
+                plt.savefig(f".outputs/tmp/300/glove_r2_300_en.{ext}", dpi=150)
 
             plt.show()
     asd = 3
