@@ -21,16 +21,15 @@ def main():
     builder = DatasetBuilder(
         base_path="/home/scarrion/datasets/nn/translation",
         datasets=[
-            {"name": "multi30k_test", "languages": ["de-en"], "sizes": [("original", None)]},
-            # {"name": "europarl", "languages": ["de-en"], "sizes": [("100k", 100000)]},
+            {"name": "multi30k", "languages": ["de-en"], "sizes": [("original", None)]},
+            # {"name": "europarl", "languages": ["de-en"], "sizes": [("original", None)]},
         ],
-        subword_models=["unigram", "word"],
-        vocab_sizes=[4000],
+        subword_models=["word"],
+        vocab_sizes=[8000],
         merge_vocabs=False,
-        force_overwrite=False,
+        force_overwrite=True,
         use_cmd=True,
         eval_mode="same",
-        conda_env_name="mltests",
         letter_case="lower",
     ).build(make_plots=False)
 
@@ -41,21 +40,22 @@ def main():
     # Train & Score a model for each dataset
     scores = []
     errors = []
-    run_prefix = "transformer256emb"
+    run_prefix = "model_mt8kemb"
     for ds in tr_datasets:
         # try:
 
         # Instantiate vocabs and model
-        src_vocab = Vocabulary(max_tokens=100).build_from_ds(ds=ds, lang=ds.src_lang)
-        trg_vocab = Vocabulary(max_tokens=100).build_from_ds(ds=ds, lang=ds.trg_lang)
-        model = Transformer(src_vocab_size=len(src_vocab), trg_vocab_size=len(trg_vocab), padding_idx=src_vocab.pad_id)
+        src_vocab = Vocabulary(max_tokens=120).build_from_ds(ds=ds, lang=ds.src_lang)
+        trg_vocab = Vocabulary(max_tokens=120).build_from_ds(ds=ds, lang=ds.trg_lang)
+        model = Transformer(src_vocab_size=len(src_vocab), trg_vocab_size=len(trg_vocab), padding_idx=src_vocab.pad_id,
+                            encoder_embed_dim=256, decoder_embed_dim=256)
 
         # Train model
         wandb_params = dict(project="autonmt-tests", entity="salvacarrion")
         model = AutonmtTranslator(model=model, src_vocab=src_vocab, trg_vocab=trg_vocab, model_ds=ds,
                                   wandb_params=wandb_params, force_overwrite=True, run_prefix=run_prefix)
-        model.fit(max_epochs=1, batch_size=128, seed=1234, num_workers=12, patience=10, strategy="dp")
-        m_scores = model.predict(ts_datasets, metrics={"bleu"}, beams=[1], max_gen_length=100, load_best_checkpoint=True)
+        model.fit(max_epochs=100, batch_size=128, seed=1234, num_workers=16, patience=10)
+        m_scores = model.predict(ts_datasets, metrics={"bleu"}, beams=[1], max_gen_length=120, load_best_checkpoint=True)
         scores.append(m_scores)
 
         # except Exception as e:

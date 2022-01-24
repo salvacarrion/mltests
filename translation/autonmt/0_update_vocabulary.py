@@ -41,34 +41,75 @@ print(f"\t\t- numpy: {np.random.rand(1)}")
 print(f"\t\t- torch: {torch.rand(1)}")
 
 
+def create_big_model(ds_small, ds_big):
+    max_length = 100
+    src_vocab_small = Vocabulary(max_tokens=max_length).build_from_ds(ds=ds_small, lang=ds_small.src_lang)
+    trg_vocab_small = Vocabulary(max_tokens=max_length).build_from_ds(ds=ds_small, lang=ds_small.trg_lang)
+
+    big_src_vocab = Vocabulary(max_tokens=max_length).build_from_ds(ds=ds_big, lang=ds_big.src_lang)
+    big_trg_vocab = Vocabulary(max_tokens=max_length).build_from_ds(ds=ds_big, lang=ds_big.trg_lang)
+
+    # Match vocabularies
+    words_small_src_vocab = src_vocab_small.get_tokens()
+    words_small_trg_vocab = trg_vocab_small.get_tokens()
+    words_big_src_vocab = big_src_vocab.get_tokens()
+    words_big_trg_vocab = big_trg_vocab.get_tokens()
+    words_missing_src_vocab = list(set(words_big_src_vocab).difference(set(words_small_src_vocab)))
+    words_missing_trg_vocab = list(set(words_big_trg_vocab).difference(set(words_small_trg_vocab)))
+    final_big_src_vocab = words_small_src_vocab + words_missing_src_vocab
+    final_big_trg_vocab = words_small_trg_vocab + words_missing_trg_vocab
+
+    # Create new vocabs from tokens
+    final_big_src_vocab[0] = '⁇'
+    final_big_trg_vocab[0] = '⁇'
+    big_src_vocab = Vocabulary(max_tokens=max_length, unk_piece='⁇').build_from_tokens([(tok.replace('▁', ''), 0) for tok in final_big_src_vocab])
+    big_trg_vocab = Vocabulary(max_tokens=max_length, unk_piece='⁇').build_from_tokens([(tok.replace('▁', ''), 0) for tok in final_big_trg_vocab])
+
+    model = Transformer(src_vocab_size=len(big_src_vocab), trg_vocab_size=len(big_trg_vocab), padding_idx=big_src_vocab.pad_id)
+    return model, big_src_vocab, big_trg_vocab
+
+
 def load_model(ds, run_prefix):
     max_length = 100
     src_vocab = Vocabulary(max_tokens=max_length).build_from_ds(ds=ds, lang=ds.src_lang)
     trg_vocab = Vocabulary(max_tokens=max_length).build_from_ds(ds=ds, lang=ds.trg_lang)
-    model = Transformer(src_vocab_size=len(src_vocab), trg_vocab_size=len(trg_vocab), padding_idx=src_vocab.pad_id,
-                            encoder_embed_dim=256, decoder_embed_dim=256)
+    model = Transformer(src_vocab_size=len(src_vocab), trg_vocab_size=len(trg_vocab), padding_idx=src_vocab.pad_id)
 
     # Load check point
-    if run_prefix:
-        checkpoint_path = ds.get_model_checkpoints_path(toolkit="autonmt", run_name=ds.get_run_name(run_prefix),
-                                                        fname="checkpoint_best.pt")
-        model_state_dict = torch.load(checkpoint_path)['state_dict']
-        model.load_state_dict(model_state_dict)
-
-        # Change vocabularies
-        src_tokens = [tok.replace('▁', '') for tok in src_vocab.get_tokens()]
-        trg_tokens = [tok.replace('▁', '') for tok in trg_vocab.get_tokens()]
-        src_tokens[0] = '⁇'
-        trg_tokens[0] = '⁇'
-        src_vocab = Vocabulary(max_tokens=max_length, unk_piece='⁇').build_from_tokens([(tok, 0) for tok in src_tokens])
-        trg_vocab = Vocabulary(max_tokens=max_length, unk_piece='⁇').build_from_tokens([(tok, 0) for tok in trg_tokens])
+    checkpoint_path = ds.get_model_checkpoints_path(toolkit="autonmt", run_name=ds.get_run_name(run_prefix),
+                                                    fname="checkpoint_best.pt")
+    model_state_dict = torch.load(checkpoint_path)['state_dict']
+    model.load_state_dict(model_state_dict)
     return model, src_vocab, trg_vocab
 
 
-def expand_model(model, small_src_vocab, small_trg_vocab, big_ds, src_emb, trg_emb, comp):
+def clone_embeddings(from_model, to_model):
+    src_emb = from_model.src_embeddings.weight.detach()
+    trg_emb = from_model.trg_embeddings.weight.detach()
+
+    to_model.src_embeddings.weight = torch.nn.parameter.Parameter(src_emb)
+    to_model.trg_embeddings.weight = torch.nn.parameter.Parameter(trg_emb)
+
+    for p in to_model.src_embeddings.parameters():
+        p.requires_grad = False
+    for p in to_model.trg_embeddings.parameters():
+        p.requires_grad = False
+
+
+def expand_model(ds_small, ds_big, comp, run_prefix, src_emb, trg_emb):
     max_length = 100
-    big_src_vocab = Vocabulary(max_tokens=max_length).build_from_ds(ds=big_ds, lang=big_ds.src_lang)
-    big_trg_vocab = Vocabulary(max_tokens=max_length).build_from_ds(ds=big_ds, lang=big_ds.trg_lang)
+    small_src_vocab = Vocabulary(max_tokens=max_length).build_from_ds(ds=ds_small, lang=ds_small.src_lang)
+    small_trg_vocab = Vocabulary(max_tokens=max_length).build_from_ds(ds=ds_small, lang=ds_small.trg_lang)
+    model = Transformer(src_vocab_size=len(small_src_vocab), trg_vocab_size=len(small_trg_vocab), padding_idx=small_src_vocab.pad_id)
+    checkpoint_path = ds_small.get_model_checkpoints_path(toolkit="autonmt", run_name=ds_small.get_run_name(run_prefix),
+                                                    fname="checkpoint_best.pt")
+    model_state_dict = torch.load(checkpoint_path)['state_dict']
+    model.load_state_dict(model_state_dict)
+
+
+    max_length = 100
+    big_src_vocab = Vocabulary(max_tokens=max_length).build_from_ds(ds=ds_big, lang=ds_big.src_lang)
+    big_trg_vocab = Vocabulary(max_tokens=max_length).build_from_ds(ds=ds_big, lang=ds_big.trg_lang)
 
     # Get old embedding matrix (small)
     device = model.device
@@ -78,7 +119,7 @@ def expand_model(model, small_src_vocab, small_trg_vocab, big_ds, src_emb, trg_e
 
     # Compute mean and std
     src_small_scaler = StandardScaler().fit(small_src_emb.numpy())
-    trg_small_scaler = StandardScaler().fit(trg_emb.numpy())
+    trg_small_scaler = StandardScaler().fit(small_trg_emb.numpy())
 
     # Get sizes
     src_big_voc_size, src_small_voc_size, src_voc_dim = len(big_src_vocab), small_src_emb.shape[0], small_src_emb.shape[1]
@@ -161,29 +202,6 @@ def expand_model(model, small_src_vocab, small_trg_vocab, big_ds, src_emb, trg_e
     return model, big_src_vocab, big_trg_vocab
 
 
-def model_with_embeddings(src_emb, trg_emb):
-    # Instantiate model
-    model = Transformer(src_vocab_size=len(src_emb), trg_vocab_size=len(trg_emb), padding_idx=3,
-                        encoder_embed_dim=256, decoder_embed_dim=256)
-    device = model.device
-    dtype = model.src_embeddings.weight.dtype
-
-    # Numpy2Tensor
-    src_emb = torch.tensor(src_emb, dtype=dtype, device=device)
-    trg_emb = torch.tensor(trg_emb, dtype=dtype, device=device)
-
-    # Convert embedding to parameter
-    model.src_embeddings.weight = torch.nn.parameter.Parameter(src_emb)
-    model.trg_embeddings.weight = torch.nn.parameter.Parameter(trg_emb)
-
-    # Freeze layer
-    for p in model.src_embeddings.parameters():
-        p.requires_grad = False
-    for p in model.trg_embeddings.parameters():
-        p.requires_grad = False
-    return model
-
-
 def weight_reset(m):
     reset_parameters = getattr(m, "reset_parameters", None)
     if callable(reset_parameters):
@@ -211,78 +229,61 @@ def load_compressed_embeddings(filename, compressor, subword_size, src_emb, trg_
     elif compressor in {"glove"}:
         src_emb = torch.nn.init.normal_(torch.zeros(subword_size, src_emb))
         trg_emb = torch.tensor(np.load(os.path.join(filename, f"trg_enc_glove_pca.npy")))
-    elif compressor in {None, "none"}:
-        src_emb = torch.tensor(np.load(os.path.join(filename, f"src.npy")))
-        trg_emb = torch.tensor(np.load(os.path.join(filename, f"trg.npy")))
     else:  # standarized
         src_emb = torch.tensor(np.load(os.path.join(filename, f"src_enc_{compressor}.npy")))
         trg_emb = torch.tensor(np.load(os.path.join(filename, f"trg_enc_{compressor}.npy")))
     return src_emb, trg_emb
 
 
-def get_ref_vocabs(ds_ref, limit, max_length=100):
-    src_vocab = Vocabulary(max_tokens=max_length).build_from_ds(ds_ref, lang=ds_ref.src_lang)
-    trg_vocab = Vocabulary(max_tokens=max_length).build_from_ds(ds_ref, lang=ds_ref.trg_lang)
-
-    # Create new vocabs from tokens
-    src_tokens = [tok.replace('▁', '') for tok in src_vocab.get_tokens()[:limit]]
-    trg_tokens = [tok.replace('▁', '') for tok in trg_vocab.get_tokens()[:limit]]
-    src_tokens[0] = '⁇'
-    trg_tokens[0] = '⁇'
-    src_vocab = Vocabulary(max_tokens=max_length, unk_piece='⁇').build_from_tokens([(tok, 0) for tok in src_tokens])
-    trg_vocab = Vocabulary(max_tokens=max_length, unk_piece='⁇').build_from_tokens([(tok, 0) for tok in trg_tokens])
-
-    return src_vocab, trg_vocab
-
-
-def get_ref_vocabs2(base_path, limit, max_length=100):
-    src_tokens = utils.load_json(os.path.join(base_path, "src.json"))
-    trg_tokens = utils.load_json(os.path.join(base_path, "trg.json"))
-    src_vocab = Vocabulary(max_tokens=max_length).build_from_tokens([(tok, 0) for tok in src_tokens])
-    trg_vocab = Vocabulary(max_tokens=max_length).build_from_tokens([(tok, 0) for tok in trg_tokens])
-
-    # Create new vocabs from tokens
-    src_tokens = [tok.replace('▁', '') for tok in src_vocab.get_tokens()[:limit]]
-    trg_tokens = [tok.replace('▁', '') for tok in trg_vocab.get_tokens()[:limit]]
-    src_tokens[0] = '⁇'
-    trg_tokens[0] = '⁇'
-    src_vocab = Vocabulary(max_tokens=max_length, unk_piece='⁇').build_from_tokens([(tok, 0) for tok in src_tokens])
-    trg_vocab = Vocabulary(max_tokens=max_length, unk_piece='⁇').build_from_tokens([(tok, 0) for tok in trg_tokens])
-
-    return src_vocab, trg_vocab
-
 def get_dataset(datasets, subword_size):
     _dss = [ds for ds in datasets if ds.vocab_size == str(subword_size)]
     return _dss[0]
 
 
-def main():
-    # Create preprocessing for training
-    builder_big = DatasetBuilder(
-        base_path="/home/scarrion/datasets/nn/translation",
-        datasets=[
-            # {"name": "multi30k", "languages": ["de-en"], "sizes": [("original", None)]},
-            {"name": "europarl", "languages": ["de-en"], "sizes": [("original_lc", None)]},
-            # {"name": "europarl", "languages": ["de-en"], "sizes": [("100k", 100000)]},
-        ],
-        subword_models=["word"],
-        vocab_sizes=[16000],
-        merge_vocabs=False,
-        force_overwrite=False,
-        use_cmd=False,
-        eval_mode="same",
-        letter_case="lower",
-    ).build(make_plots=False, safe=True)
-    big_datasets = builder_big.get_ds()
-    ds_ref = big_datasets[0]
+def get_glove_embeddings(trg_vocab):
+    emb_size = 300
+    embeddings_index = {}
+    path_to_glove_file = f"/home/scarrion/Downloads/glove.6B/glove.6B.{emb_size}d.txt"
+    with open(path_to_glove_file) as f:
+        for line in f:
+            word, coefs = line.split(maxsplit=1)
+            coefs = np.fromstring(coefs, "f", sep=" ")
+            embeddings_index[word] = coefs
 
+    # Select entries
+    glove_emb = []
+    missing = 0
+    for word in trg_vocab.get_tokens():
+        if word in embeddings_index:
+            tok = embeddings_index[word]
+        else:
+            missing += 1
+            tok = torch.nn.init.normal_(torch.empty(emb_size)).detach().cpu().numpy()
+        glove_emb.append(tok)
+    assert len(glove_emb) == len(trg_vocab)
+    print(f"Missing: {missing}")
+
+    # Apply PCA
+    glove_emb = np.stack(glove_emb, axis=0)
+    trg_pca = PCA(n_components=256).fit(X=glove_emb)
+    new_glove_emb = trg_pca.transform(glove_emb)
+    return new_glove_emb
+
+
+def add_trg_embedding(model, trg_emb):
+    t = torch.tensor(trg_emb)
+    model.trg_embeddings.weight = torch.nn.parameter.Parameter(t)
+    for p in model.trg_embeddings.parameters():
+        p.requires_grad = False
+
+
+def main():
     # Create preprocessing for training
     builder = DatasetBuilder(
         base_path="/home/scarrion/datasets/nn/translation",
         datasets=[
             # {"name": "multi30k", "languages": ["de-en"], "sizes": [("original", None)]},
-            # {"name": "europarl", "languages": ["de-en"], "sizes": [("original_lc", None)]},
-            {"name": "europarl", "languages": ["de-en"], "sizes": [("100k", 100000)]},
+            {"name": "europarl", "languages": ["de-en"], "sizes": [("original_lc", None)]},
         ],
         subword_models=["word"],
         vocab_sizes=[250, 500, 1000, 2000, 4000, 8000],
@@ -304,58 +305,81 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Export raw embeddings
-    # run_prefix = "model"
-    # for ds in tr_datasets:
-    #     # Save embeddings
-    #     model, src_vocab, trg_vocab = load_model(ds, run_prefix)
-    #     save_embeddings_models(model, f".outputs/tmp/256/{str(ds).replace('_test', '')}")  #⁇
+    run_prefix = "model"
+    for ds in tr_datasets:
+        # Save embeddings
+        model, src_vocab, trg_vocab = load_model(ds, run_prefix)
+        save_embeddings_models(model, f".outputs/tmp/256/{str(ds)}")  #⁇
 
-    # pairs = [(250, 500), (500, 1000), (1000, 2000), (2000, 4000), (4000, 8000)]  #  (500, 1000), (1000, 2000), (2000, 4000), (4000, 8000), (8000, 8000)
-    pairs = [(8000, 16000), (4000, 8000), (2000, 4000)]  #  (500, 1000), (1000, 2000), (2000, 4000), (4000, 8000), (8000, 8000)
-    compressors = ["none"]
+    pairs = [(250, 500), (500, 1000), (1000, 2000), (2000, 4000), (4000, 8000)]
+    compressors = ["random"]
     rows = []
-    batch_size = 64
     for origin_emb_size in [256]:
         for sw_small, sw_big in pairs:
-            # Get embeddings/vocabs
-            # src_emb, trg_emb = load_compressed_embeddings(f".outputs/tmp/256/{str(ds_ref)}", compressor="none", subword_size=sw_big, src_emb=256, trg_emb=256)
-            # src_vocab, trg_vocab = get_ref_vocabs(ds_ref, limit=16000)
-
-            src_emb, trg_emb = load_compressed_embeddings(f".outputs/tmp/256/fasttext256_europarl_lc_16k", compressor="none", subword_size=sw_big, src_emb=256, trg_emb=256)
-            src_vocab, trg_vocab = get_ref_vocabs(ds_ref, limit=sw_small)
-            # src_vocab2, trg_vocab2 = get_ref_vocabs2(f".outputs/tmp/256/fasttext256_europarl_lc_16k", limit=16000)
-
-            # Load small model and vocabs
+            # Get datasets
             ds_small = get_dataset(tr_datasets, sw_small)
-            run_prefix = "model_fasttext256_16k__europarl100k"  #f"model_eu8kemb"  # model_mt8kemb
-            model = model_with_embeddings(src_emb, trg_emb)
+            ds_big = get_dataset(tr_datasets, sw_big)
+            assert ds_small.dataset_name == ds_big.dataset_name
+            assert ds_small.subword_model == ds_big.subword_model
 
-            # Load checkpoint (to evaluate)
-            # ds_small.subword_model = "none"
-            # checkpoint_path = ds_small.get_model_checkpoints_path(toolkit="autonmt", run_name=ds_small.get_run_name(run_prefix), fname="checkpoint_best.pt")
-            # model_state_dict = torch.load(checkpoint_path)['state_dict']
-            # model.load_state_dict(model_state_dict)
+            for comp in compressors:
+                # Compress vector
+                src_emb, trg_emb = None, None
+                if comp not in {None, "none"}:
+                    _origin_emb_size = 300 if comp == "glove" else origin_emb_size
+                    src_emb, trg_emb = load_compressed_embeddings(f".outputs/tmp/{_origin_emb_size}/{str(ds_big)}", comp, subword_size=sw_big, src_emb=256, trg_emb=256)
+                run_prefix = f"transformer256emb"  # Don't change it
 
-            model = model.to(device)
+                model, big_src_vocab, big_trg_vocab = create_big_model(ds_small, ds_big)
+                # _model, _big_src_vocab, _big_trg_vocab = expand_model(ds_small, ds_big, comp, run_prefix, src_emb, trg_emb)
+                # clone_embeddings(from_model=_model, to_model=model)
+                # del _model
 
-            # Test model
-            ds_small.subword_model = "none"
-            wandb_params = None  #dict(project="autonmt-tests", entity="salvacarrion")
-            model = AutonmtTranslator(model=model, model_ds=ds_small,  src_vocab=src_vocab, trg_vocab=trg_vocab, wandb_params=wandb_params, run_prefix=run_prefix, force_overwrite=True)
-            model.fit(max_epochs=30, learning_rate=0.001, optimizer="adam", batch_size=batch_size, seed=1234, num_workers=0, patience=10)
-            m_scores = model.predict(eval_datasets=ts_datasets, metrics={"bleu"}, beams=[1], max_gen_length=max_tokens, batch_size=batch_size)
-            ds_small.subword_model = "word"
+                # # Load glove embeddings
+                # emb_dir = f".outputs/tmp/glove_256/{sw_small}-{sw_big}/{comp}"
+                # emb_path = f"{emb_dir}/raw_glove.npy"
+                # if os.path.exists(emb_path):
+                #     glove_emb = np.load(emb_path)
+                # else:
+                #     glove_emb = get_glove_embeddings(big_trg_vocab)
+                #
+                #     # Save embeddings
+                #     utils.make_dir(emb_dir)
+                #     np.save(emb_path, glove_emb)
+                #
+                # # Add trg embedding
+                # add_trg_embedding(model, glove_emb)
 
-            # Keep results
-            bleu = m_scores[0]['beams']['beam1']['sacrebleu_bleu_score']
-            row = {"dataset_name": ds_small.dataset_name, "subword_model": ds_small.subword_model, "from_to": f"{sw_small}", "origin_emb_size": origin_emb_size, "compressor": "none", "bleu": bleu}
-            rows.append(row)
-            print(row)
-            asd = 3
+                # Add embeddings
+                model = model.to(device)
+
+                # Load small model and vocabs
+                # run_prefix = f"transformer256emb"  # Don't change it
+                # model, src_vocab, trg_vocab = load_model(ds_small, run_prefix)
+                # # run_prefix += f"_zr_oes{origin_emb_size}_c{comp}_{sw_small}-{sw_big}"
+                #
+                # # Expand model and vocabs
+                # model, src_vocab, trg_vocab = expand_model(model, src_vocab, trg_vocab, ds_big, src_emb, trg_emb, comp)
+                # model = model.to(device)
+
+                # Test model
+                ds_small.subword_model = "none"
+                wandb_params = None  #dict(project="autonmt-tests", entity="salvacarrion")
+                model = AutonmtTranslator(model=model, model_ds=ds_small,  src_vocab=big_src_vocab, trg_vocab=big_trg_vocab, wandb_params=wandb_params, run_prefix=run_prefix, force_overwrite=True)
+                model.fit(max_epochs=1, learning_rate=0.0001, optimizer="sgd", batch_size=128, seed=1234, num_workers=0, patience=10)
+                m_scores = model.predict(eval_datasets=ts_datasets, metrics={"bleu"}, beams=[1], max_gen_length=max_tokens)
+                ds_small.subword_model = "word"
+
+                # Keep results
+                bleu = m_scores[0]['beams']['beam1']['sacrebleu_bleu_score']
+                row = {"dataset_name": ds_small.dataset_name, "subword_model": ds_small.subword_model, "from_to": f"{sw_small}➔{sw_big}", "origin_emb_size": origin_emb_size, "compressor": comp, "bleu": bleu}
+                rows.append(row)
+                print(row)
+                asd = 3
 
     # Create pandas dataframe
     df = pd.DataFrame(rows)
-    df.to_csv("europarl2M.csv", index=False)
+    df.to_csv("europarl.csv", index=False)
     print(df)
 
 

@@ -115,7 +115,7 @@ def main():
         base_path="/home/scarrion/datasets/nn/translation",
         datasets=[
             {"name": "multi30k", "languages": ["de-en"], "sizes": [("original", None)]},
-            {"name": "europarl", "languages": ["de-en"], "sizes": [("100k", 100000)]},
+            # {"name": "europarl", "languages": ["de-en"], "sizes": [("100k", 100000)]},
         ],
         subword_models=["word"],
         vocab_sizes=[500, 1000, 2000, 4000, 8000],
@@ -123,7 +123,6 @@ def main():
         force_overwrite=False,
         use_cmd=True,
         eval_mode="same",
-        conda_env_name="mltests",
         letter_case="lower",
     ).build(make_plots=False, safe=True)
 
@@ -133,7 +132,7 @@ def main():
 
     # Save embeddings
     rows = []
-    origin_emb_size = 512
+    origin_emb_size = 304
     name = "pca"
     for ds in tr_datasets:
         print(f"Encoding data for: {str(ds)}")

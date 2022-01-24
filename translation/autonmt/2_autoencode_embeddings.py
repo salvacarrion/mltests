@@ -128,7 +128,7 @@ def encode_data2(filename, enc_dim, name=""):
     trg_scores = compute_error(trg_emb, trg_emb_rec, title="trg")
 
     # Save embeddings
-    np.save(os.path.join(filename, f"trg_enc_glove_{name}.npy"), new_trg_emb)
+    np.save(os.path.join(filename, f"trg_enc_{name}.npy"), new_trg_emb)
     print(f"Embeddings saved! ({filename})")
 
     return trg_scores
@@ -139,7 +139,7 @@ def main():
         base_path="/home/scarrion/datasets/nn/translation",
         datasets=[
             {"name": "multi30k", "languages": ["de-en"], "sizes": [("original", None)]},
-            {"name": "europarl", "languages": ["de-en"], "sizes": [("100k", 100000)]},
+            # {"name": "europarl", "languages": ["de-en"], "sizes": [("100k", 100000)]},
         ],
         subword_models=["word"],
         vocab_sizes=[250, 500, 1000, 2000, 4000, 8000],
@@ -147,7 +147,6 @@ def main():
         force_overwrite=False,
         use_cmd=True,
         eval_mode="same",
-        conda_env_name="mltests",
         letter_case="lower",
     ).build(make_plots=False, safe=True)
 
@@ -157,25 +156,41 @@ def main():
 
     # Save embeddings
     rows = []
-    origin_emb_size = 300
-    name = "ae_non_linear_tanh"
+    origin_emb_size = 304
+    name = "ae_linear"
     for ds in tr_datasets:
         print(f"Encoding data for: {str(ds)}")
-
         # Encode data
-        trg_scores = encode_data2(f".outputs/tmp/{origin_emb_size}/{str(ds)}", enc_dim=256, name=name)
+        src_scores, trg_scores = encode_data(f".outputs/tmp/{origin_emb_size}/{str(ds)}", enc_dim=256, name=name)
 
         # Keep info
+        src_scores["emb_name"] = "src"
+        src_scores["dataset_name"] = ds.dataset_name
+        src_scores["subword_model"] = ds.subword_model
+        src_scores["vocab_size"] = ds.vocab_size
         trg_scores["emb_name"] = "trg"
         trg_scores["dataset_name"] = ds.dataset_name
         trg_scores["subword_model"] = ds.subword_model
         trg_scores["vocab_size"] = ds.vocab_size
+        rows.append(src_scores)
         rows.append(trg_scores)
+
+        # # Encode data 2
+        # trg_scores = encode_data2(f".outputs/tmp/{origin_emb_size}/{str(ds)}", enc_dim=256, name=name)
+        #
+        # # Keep info
+        # trg_scores["emb_name"] = "trg"
+        # trg_scores["dataset_name"] = ds.dataset_name
+        # trg_scores["subword_model"] = ds.subword_model
+        # trg_scores["vocab_size"] = ds.vocab_size
+        # rows.append(trg_scores)
 
     # Print results
     df = pd.DataFrame(rows)
     df.to_csv(f".outputs/tmp/{origin_emb_size}/{name}_{origin_emb_size}.csv", index=False)
     print(df)
+
+
 
 if __name__ == "__main__":
     main()
