@@ -19,21 +19,24 @@ sm.framework()
 
 # Variables
 TARGET_SIZE = 256
-BATCH_SIZE = 64
-EPOCHS_STAGE1 = 1
-EPOCHS_STAGE2 = 1
+BATCH_SIZE = 128
+EPOCHS_STAGE1 = 100
+EPOCHS_STAGE2 = 1000
 BACKBONE = "resnet34"
 BASE_PATH = "/home/scarrion/datasets/nn/vision/lungs_masks"
 print(BASE_PATH)
 
+strategy = tf.distribute.MirroredStrategy()
+
 
 def get_model(backbone):
-    if backbone == "resnet34":
-        from segmentation_models import Unet
-        model = Unet("resnet34", encoder_weights='imagenet', classes=1, activation='sigmoid', encoder_freeze=True)
-        prep_fn = preprocessing_fn(custom_fn=sm.get_preprocessing("resnet34"))
-    else:
-        raise ValueError("Unknown backbone")
+    with strategy.scope():
+        if backbone == "resnet34":
+            from segmentation_models import Unet
+            model = Unet("resnet34", encoder_weights='imagenet', classes=1, activation='sigmoid', encoder_freeze=True)
+            prep_fn = preprocessing_fn(custom_fn=sm.get_preprocessing("resnet34"))
+        else:
+            raise ValueError("Unknown backbone")
     return model, prep_fn
 
 
@@ -63,8 +66,9 @@ def train(model, train_dataset, val_dataset, use_multiprocessing=False, workers=
     # define model
     model.summary()
 
-    # Compile the model
-    model.compile(optimizer=Adam(learning_rate=1e-3), loss=bce_jaccard_loss, metrics=[iou_score])
+    with strategy.scope():
+        # Compile the model
+        model.compile(optimizer=Adam(learning_rate=1e-3), loss=bce_jaccard_loss, metrics=[iou_score])
 
     # train the model on the new data for a few epochs
     print("Training decoder first...")
@@ -75,11 +79,12 @@ def train(model, train_dataset, val_dataset, use_multiprocessing=False, workers=
     if plots_path:
         plot.plot_hist(history1, title="Training decoder", savepath=plots_path, suffix="_initial")
 
-    # we need to recompile the model for these modifications to take effect
-    # we use SGD with a low learning rate
-    print("Fine-tuning model...")
-    set_trainable(model, recompile=False)
-    model.compile(optimizer=SGD(learning_rate=1e-4, momentum=0.9), loss=bce_jaccard_loss, metrics=[iou_score])
+    with strategy.scope():
+        # we need to recompile the model for these modifications to take effect
+        # we use SGD with a low learning rate
+        print("Fine-tuning model...")
+        set_trainable(model, recompile=False)
+        model.compile(optimizer=SGD(learning_rate=1e-4, momentum=0.9), loss=bce_jaccard_loss, metrics=[iou_score])
 
     # we train our model again (this time fine-tuning the top 2 inception blocks
     # alongside the top Dense layers
