@@ -19,7 +19,7 @@ sm.framework()
 
 # Variables
 TARGET_SIZE = 256
-BATCH_SIZE = 1
+BATCH_SIZE = 64
 EPOCHS_STAGE1 = 1
 EPOCHS_STAGE2 = 1
 BACKBONE = "resnet34"

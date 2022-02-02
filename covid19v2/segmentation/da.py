@@ -16,6 +16,7 @@ def da_tr_fn(height, width):
         # This first! (...to avoid weird crops)
         A.LongestMaxSize(max_size=max(height, width), always_apply=True),
         A.PadIfNeeded(min_height=height, min_width=width, border_mode=cv2.BORDER_CONSTANT, always_apply=True),
+        A.Resize(height=height, width=width),  # Workaround for the rounding bug
 
         # Data augmentation
         A.HorizontalFlip(p=0.5),
@@ -52,6 +53,7 @@ def da_ts_fn(height, width):
     _transform = [
         A.LongestMaxSize(max_size=max(height, width), always_apply=True),
         A.PadIfNeeded(min_height=height, min_width=width, border_mode=cv2.BORDER_CONSTANT, always_apply=True),
+        A.Resize(height=height, width=width),  # Workaround for the rounding bug
     ]
     return A.Compose(_transform)
 

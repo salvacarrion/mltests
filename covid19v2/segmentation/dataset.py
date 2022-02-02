@@ -38,8 +38,8 @@ class DatasetMasks:
         # Load images in memory (minor speed-up)
         self.memory_map = memory_map
         if self.memory_map:
-            self.mem_images = [np.array(Image.open(self.image_files[i])) for i in range(len(self.file_ids))]
-            self.mem_masks = [np.array(Image.open(self.masks_files[i]))[..., 0] for i in range(len(self.file_ids))]
+            self.mem_images = [np.array(Image.open(self.image_files[i])).astype(np.uint8) for i in range(len(self.file_ids))]
+            self.mem_masks = [np.array(Image.open(self.masks_files[i]))[..., 0].astype(np.uint8) for i in range(len(self.file_ids))]  # masks could be RGB
 
         # Other
         self.da_fn = da_fn
@@ -62,15 +62,19 @@ class DatasetMasks:
         if self.da_fn:
             sample = self.da_fn(image=image, mask=mask)
             image, mask = sample['image'], sample['mask']
+            assert image.shape[:2] == (256, 256)
+            assert mask.shape[:2] == (256, 256)
 
         # apply preprocessing
         if self.preprocess_fn:
             sample = self.preprocess_fn(image=image, mask=mask)
             image, mask = sample['image'], sample['mask']
+            assert image.shape[:2] == (256, 256)
+            assert mask.shape[:2] == (256, 256)
 
         # Convert images
-        image = np.stack((image,) * 3, axis=-1)  # Grayscale to RGB
-        mask = mask.astype(np.bool).astype(np.float32)
+        image = np.stack((image,) * 3, axis=-1).astype(np.uint8)  # Grayscale to RGB
+        mask = mask.astype(np.bool).astype(np.uint8)
 
         return image, mask, original_image, original_mask
 
