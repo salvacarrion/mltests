@@ -29,7 +29,6 @@ def main():
     for i, row in tqdm.tqdm(df.iterrows(), total=len(df)):
         # print(f"Augmenting image: {row['filepath']}")
         filename = row["ImageFile"]
-        fname, ext = os.path.splitext(filename)  # ext includes "."
 
         # Open ori image
         ori_img_path = os.path.join(BASE_PATH, "images", "raw", filename)
