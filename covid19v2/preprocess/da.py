@@ -62,5 +62,6 @@ def da_resize_pad_fn(height, width):
     da_transform += [
         A.LongestMaxSize(max_size=max(height, width), interpolation=cv2.INTER_LANCZOS4, always_apply=True),
         A.PadIfNeeded(min_height=height, min_width=width, border_mode=cv2.BORDER_CONSTANT, always_apply=True),
+        A.Resize(height=height, width=width),  # Workaround for the rounding bug
     ]
     return A.Compose(da_transform)
