@@ -8,18 +8,6 @@ from tensorflow import keras
 
 # classes for data loading and preprocessing
 class DatasetMasks:
-    """Covid19 Dataset. Read images, apply augmentation and preprocessing transformations.
-
-    Args:
-        images_dir (str): path to images folder
-        masks_dir (str): path to segmentation masks folder
-        class_values (list): values of classes to extract from segmentation mask
-        da_fn (albumentations.Compose): data transfromation pipeline
-            (e.g. flip, scale, etc.)
-        preprocess_fn (albumentations.Compose): data preprocessing
-            (e.g. normalization, shape manipulation, etc.)
-
-    """
 
     def __init__(
             self,
@@ -29,6 +17,7 @@ class DatasetMasks:
             da_fn=None,
             preprocess_fn=None,
             memory_map=True,
+
     ):
         # Get full paths
         self.file_ids = list(files)
@@ -83,13 +72,6 @@ class DatasetMasks:
 
 
 class DataloaderMasks(keras.utils.Sequence):
-    """Load data from dataset and form batches
-
-    Args:
-        dataset: instance of Dataset class for image loading and preprocessing.
-        batch_size: Integer number of images in batch.
-        shuffle: Boolean, if `True` shuffle image indexes each epoch.
-    """
 
     def __init__(self, dataset, batch_size=1, shuffle=False):
         self.dataset = dataset
@@ -109,14 +91,101 @@ class DataloaderMasks(keras.utils.Sequence):
             data.append(self.dataset[j])
 
         # Transpose list of lists  (get first two elements: images, masks, *_)
-        X, y, X_ori, y_ori = tuple([samples for samples in zip(*data)])
-        # try:
+        X, y, _, _ = tuple([samples for samples in zip(*data)])
         X = np.stack(X, axis=0).astype(np.float32)
         y = np.stack(y, axis=0).astype(np.float32)
-        #     asd = 3
-        # except ValueError as e:
-        #     asd = 3
         return X, y
+
+    def __len__(self):
+        """Denotes the number of batches per epoch"""
+        return math.ceil(len(self.indexes) / self.batch_size)
+
+    def on_epoch_end(self):
+        """Callback function to shuffle indexes each epoch"""
+        if self.shuffle:
+            self.indexes = np.random.permutation(self.indexes)
+
+
+class DatasetImages:
+
+    def __init__(
+            self,
+            base_path,
+            folder,
+            files,
+            da_fn=None,
+            preprocess_fn=None,
+            memory_map=True,
+
+    ):
+        # Get full paths
+        self.file_ids = list(files)
+        self.image_files = [os.path.join(base_path, "images", folder, file) for file in self.file_ids]
+
+        # Load images in memory (minor speed-up)
+        self.memory_map = memory_map
+        if self.memory_map:
+            self.mem_images = [np.array(Image.open(self.image_files[i])).astype(np.uint8) for i in
+                               range(len(self.file_ids))]
+
+        # Other
+        self.da_fn = da_fn
+        self.preprocess_fn = preprocess_fn
+
+    def __getitem__(self, i):
+        # Read/Load data
+        if self.memory_map:
+            image = self.mem_images[i]
+        else:
+            image = np.array(Image.open(self.image_files[i]))
+
+        # # Keep originals (just for visualization)
+        original_image = np.array(image)
+
+        # apply augmentations
+        if self.da_fn:
+            sample = self.da_fn(image=image)
+            image = sample['image']
+            assert image.shape[:2] == (256, 256)
+
+        # apply preprocessing
+        if self.preprocess_fn:
+            sample = self.preprocess_fn(image=image)
+            image = sample['image']
+            assert image.shape[:2] == (256, 256)
+
+        # Convert images
+        image = np.stack((image,) * 3, axis=-1).astype(np.uint8)  # Grayscale to RGB
+
+        return image, original_image
+
+    def __len__(self):
+        return len(self.file_ids)
+
+
+class DataloaderImages(keras.utils.Sequence):
+    def __init__(self, dataset, batch_size=1, shuffle=False):
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.indexes = np.arange(len(dataset))
+
+        self.on_epoch_end()
+
+    def __getitem__(self, i):
+
+        # collect batch data
+        start = i * self.batch_size
+        stop = min((i + 1) * self.batch_size, len(self.dataset))
+        data, data_ids = [], []
+        for j in range(start, stop):
+            data_ids.append(self.dataset.file_ids[j])
+            data.append(self.dataset[j])
+
+        # Transpose list of lists  (get first two elements: images, masks, *_)
+        X, _ = tuple([samples for samples in zip(*data)])
+        X = np.stack(X, axis=0).astype(np.float32)
+        return data_ids, X
 
     def __len__(self):
         """Denotes the number of batches per epoch"""

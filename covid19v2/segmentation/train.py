@@ -10,8 +10,9 @@ from segmentation_models.utils import set_trainable
 from tensorflow.keras.optimizers import SGD, Adam
 
 from covid19v2.segmentation.dataset import DatasetMasks, DataloaderMasks
-from covid19v2.segmentation.da import da_tr_fn, da_ts_fn, preprocessing_fn
+from covid19v2.segmentation.da import da_tr_fn, da_ts_fn
 from covid19v2.segmentation import plot
+from covid19v2.segmentation import utils
 
 # Fix sm
 sm.set_framework('tf.keras')
@@ -20,24 +21,15 @@ sm.framework()
 # Variables
 TARGET_SIZE = 256
 BATCH_SIZE = 128
-EPOCHS_STAGE1 = 100
-EPOCHS_STAGE2 = 1000
+EPOCHS_STAGE1 = 2000
+EPOCHS_STAGE2 = 2000
 BACKBONE = "resnet34"
+
+
 BASE_PATH = "/home/scarrion/datasets/nn/vision/lungs_masks"
 print(BASE_PATH)
 
 strategy = tf.distribute.MirroredStrategy()
-
-
-def get_model(backbone):
-    with strategy.scope():
-        if backbone == "resnet34":
-            from segmentation_models import Unet
-            model = Unet("resnet34", encoder_weights='imagenet', classes=1, activation='sigmoid', encoder_freeze=True)
-            prep_fn = preprocessing_fn(custom_fn=sm.get_preprocessing("resnet34"))
-        else:
-            raise ValueError("Unknown backbone")
-    return model, prep_fn
 
 
 def train(model, train_dataset, val_dataset, use_multiprocessing=False, workers=1):
@@ -56,8 +48,8 @@ def train(model, train_dataset, val_dataset, use_multiprocessing=False, workers=
 
     # Callbacks
     model_callbacks = [
-        tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=1e-5),
-        tf.keras.callbacks.EarlyStopping(patience=10),
+        tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=10, min_lr=1e-5),
+        tf.keras.callbacks.EarlyStopping(patience=20),
         # tf.keras.callbacks.ModelCheckpoint(filepath=checkpoints_path, save_best_only=True, mode='min'),  # It can make the end of an epoch extremely slow
         tf.keras.callbacks.TensorBoard(log_dir=logs_path),
         # WandbCallback(),
@@ -112,9 +104,10 @@ def main():
     masks_files = set([f for f in os.listdir(masks_dir)])
     files = list(masks_files.intersection(images_files))
     random.shuffle(files)  # Randomize
+    print(f"Total Images+Masks: {len(files)}")
 
     # Get model + auxiliar functions
-    model, preprocess_fn = get_model(backbone=BACKBONE)
+    model, preprocess_fn = utils.get_model(backbone=BACKBONE)
 
     # Datasets
     tr_size = int(len(files)*0.8)
