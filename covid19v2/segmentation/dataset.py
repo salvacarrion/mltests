@@ -6,6 +6,15 @@ from PIL import Image
 from tensorflow import keras
 
 
+def force_2d(img):
+    if len(img.shape) == 2:
+        return img
+    elif len(img.shape) == 3:
+        return img[:, :, 0]
+    else:
+        raise ValueError("Images must have either 2D or 3D")
+
+
 # classes for data loading and preprocessing
 class DatasetMasks:
 
@@ -27,8 +36,8 @@ class DatasetMasks:
         # Load images in memory (minor speed-up)
         self.memory_map = memory_map
         if self.memory_map:
-            self.mem_images = [np.array(Image.open(self.image_files[i])).astype(np.uint8) for i in range(len(self.file_ids))]
-            self.mem_masks = [np.array(Image.open(self.masks_files[i]))[..., 0].astype(np.uint8) for i in range(len(self.file_ids))]  # masks could be RGB
+            self.mem_images = [force_2d(np.array(Image.open(self.image_files[i]))).astype(np.uint8) for i in range(len(self.file_ids))]
+            self.mem_masks = [force_2d(np.array(Image.open(self.masks_files[i]))).astype(np.uint8) for i in range(len(self.file_ids))]  # masks could be RGB
 
         # Other
         self.da_fn = da_fn
@@ -42,6 +51,9 @@ class DatasetMasks:
         else:
             image = np.array(Image.open(self.image_files[i]))
             mask = np.array(Image.open(self.masks_files[i]))
+
+        # Force 2D
+        image, mask = force_2d(image), force_2d(mask)
 
         # # Keep originals (just for visualization)
         original_image = np.array(image)

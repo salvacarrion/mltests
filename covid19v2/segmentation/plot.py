@@ -114,10 +114,10 @@ def plot_4x4(image, mask, original_image=None, original_mask=None, title=None):
     plt.show()
 
 
-def plot_dataset(dataset, i, n=5, mode="img+img_da"):
-    for _ in range(n):
-        image, mask, original_image, original_mask = dataset.__getitem__(i)
-        filename = dataset.file_ids[i]
+def plot_dataset(dataset, img_i, num_aug=5, mode="img+img_da"):
+    for _ in range(num_aug):
+        image, mask, original_image, original_mask = dataset.__getitem__(img_i)
+        filename = dataset.file_ids[img_i]
 
         if mode == "img+img_da":
             plot_da_image(

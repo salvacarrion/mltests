@@ -24,7 +24,7 @@ BATCH_SIZE = 128
 EPOCHS_STAGE1 = 2000
 EPOCHS_STAGE2 = 2000
 BACKBONE = "resnet34"
-
+RUN_NAME = "v2"
 
 BASE_PATH = "/home/scarrion/datasets/nn/vision/lungs_masks"
 print(BASE_PATH)
@@ -34,9 +34,9 @@ strategy = tf.distribute.MirroredStrategy()
 
 def train(model, train_dataset, val_dataset, use_multiprocessing=False, workers=1):
     # Outputs
-    checkpoints_path = os.path.join(BASE_PATH, "runs", "models")
-    logs_path = os.path.join(BASE_PATH, "runs", "logs")
-    plots_path = os.path.join(BASE_PATH, "runs", "plots")
+    checkpoints_path = os.path.join(BASE_PATH, "runs", RUN_NAME, "models")
+    logs_path = os.path.join(BASE_PATH, "runs", RUN_NAME, "logs")
+    plots_path = os.path.join(BASE_PATH, "runs", RUN_NAME, "plots")
 
     # Create folders
     for dir_i in [checkpoints_path, logs_path, plots_path]:
@@ -107,7 +107,8 @@ def main():
     print(f"Total Images+Masks: {len(files)}")
 
     # Get model + auxiliar functions
-    model, preprocess_fn = utils.get_model(backbone=BACKBONE)
+    with strategy.scope():
+        model, preprocess_fn = utils.get_model(backbone=BACKBONE)
 
     # Datasets
     tr_size = int(len(files)*0.8)
@@ -115,7 +116,8 @@ def main():
     val_dataset = DatasetMasks(BASE_PATH, folder="train", files=files[tr_size:], da_fn=da_ts_fn(TARGET_SIZE, TARGET_SIZE), preprocess_fn=preprocess_fn)
 
     # Visualize
-    # plot.plot_dataset(train_dataset, i=5, n=10, mode="all")  # img+img_da, img+mask, all
+    # for i in range(10):
+    #     plot.plot_dataset(train_dataset, img_i=i, num_aug=1, mode="all")  # img+img_da, img+mask, all
 
     # Train
     train(model, train_dataset, val_dataset)
