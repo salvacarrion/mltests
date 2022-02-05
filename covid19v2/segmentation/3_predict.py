@@ -26,6 +26,7 @@ EPOCHS_STAGE1 = 2000
 EPOCHS_STAGE2 = 2000
 BACKBONE = "resnet34"
 SAVE_OVERLAY = True
+RUN_NAME = "v2"
 
 BASE_PATH = "/home/scarrion/datasets/nn/vision/lungs_masks"
 print(BASE_PATH)
@@ -103,7 +104,7 @@ def main():
     with strategy.scope():
         # Load model
         print("Loading model...")
-        checkpoints_path = os.path.join(BASE_PATH, "runs", "models", "checkpoint_last")
+        checkpoints_path = os.path.join(BASE_PATH, "runs", RUN_NAME, "models", "checkpoint_last")
         model = tf.keras.models.load_model(filepath=checkpoints_path, compile=False)
         model.compile(loss=bce_jaccard_loss, metrics=[iou_score])
         model.summary()
