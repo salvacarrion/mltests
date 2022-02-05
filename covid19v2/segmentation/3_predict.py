@@ -1,4 +1,5 @@
 import os
+import shutil
 from pathlib import Path
 import random
 import tqdm
@@ -13,7 +14,7 @@ from PIL import Image
 
 from covid19v2.segmentation.dataset import DatasetImages, DataloaderImages
 from covid19v2.segmentation.da import da_ts_fn
-from covid19v2.segmentation import utils
+from covid19v2.segmentation import utils, plot
 
 # Fix sm
 sm.set_framework('tf.keras')
@@ -26,7 +27,7 @@ EPOCHS_STAGE1 = 2000
 EPOCHS_STAGE2 = 2000
 BACKBONE = "resnet34"
 SAVE_OVERLAY = True
-RUN_NAME = "v2"
+RUN_NAME = "v3"
 
 BASE_PATH = "/home/scarrion/datasets/nn/vision/lungs_masks"
 print(BASE_PATH)
@@ -53,38 +54,13 @@ def predict(model, dataset, use_multiprocessing=False, workers=1):
 
         # Save images in batch
         for file_id, img, img_pred in zip(file_ids, batch, predictions):  # ids, inputs, outputs
-            # From 0-1 to 0-255
-            img255 = (img.squeeze()).astype(np.uint8)
-            pred_img255 = ((img_pred.squeeze() > 0.5) * 255).astype(np.uint8)
-
-            # Convert to PIL
-            pil_img = Image.fromarray(img255)
-            pil_img_pred = Image.fromarray(pred_img255)
-
-            # Save images
+            # Save prediction
+            img_pred = ((img_pred.squeeze() > 0.5) * 255).astype(np.uint8)
+            pil_img_pred = Image.fromarray(img_pred)
             pil_img_pred.save(os.path.join(output_path, file_id))
-            # print(f"Image save! {img_id}")
 
             # Save overlay
-            if SAVE_OVERLAY:
-                # Convert to RGBA
-                pil_img = pil_img.convert('RGBA')
-                pil_img_pred = pil_img_pred.convert('RGBA')
-
-                # Make the background transparent
-                pil_img_pred_trans = utils.make_transparent(pil_img_pred, color=(0, 0, 0))
-                pil_img_pred_trans.putalpha(75)
-                overlaid_img = Image.alpha_composite(pil_img, pil_img_pred_trans)
-
-                # Save overlaid image
-                overlaid_img.save(os.path.join(output_overlay_path, file_id))
-                # print(f"Overlaid image save! {img_id}")
-
-                # Show images
-                # if True:
-                #     imshow(overlaid_img)
-                #     plt.show()
-                asd = 3
+            plot.masks2overlay(image=img, mask=img_pred, output_path=output_overlay_path, file_id=file_id)
 
 
 def main():

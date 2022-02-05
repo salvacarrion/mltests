@@ -3,6 +3,11 @@ import os
 import matplotlib.pyplot as plt
 from matplotlib import ticker
 
+import numpy as np
+from PIL import Image
+
+from covid19v2.segmentation import utils
+
 
 # helper function for data visualization
 def plot_da_image_and_masks(image, mask, original_image=None, original_mask=None):
@@ -139,3 +144,27 @@ def plot_dataset(dataset, img_i, num_aug=5, mode="img+img_da"):
                 original_mask=original_mask,
                 title=filename,
             )
+
+
+def masks2overlay(image, mask, output_path, file_id):
+    assert image.shape[:2] == mask.shape[:2]
+
+    # From 0-1 to 0-255
+    image = image.astype(np.uint8)
+    mask = ((mask > 0) * 255).astype(np.uint8)
+
+    # Convert to PIL
+    pil_img = Image.fromarray(image)
+    pil_mask = Image.fromarray(mask)
+
+    # Convert to RGBA
+    pil_img = pil_img.convert('RGBA')
+    pil_mask = pil_mask.convert('RGBA')
+
+    # Make the background transparent
+    pil_mask_alpha = utils.make_transparent(pil_mask, color=(0, 0, 0))
+    pil_mask_alpha.putalpha(75)
+
+    # Overlay mask and save image
+    overlaid_img = Image.alpha_composite(pil_img, pil_mask_alpha)
+    overlaid_img.save(os.path.join(output_path, file_id))

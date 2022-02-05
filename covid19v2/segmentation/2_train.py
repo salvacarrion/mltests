@@ -24,7 +24,7 @@ BATCH_SIZE = 128
 EPOCHS_STAGE1 = 2000
 EPOCHS_STAGE2 = 2000
 BACKBONE = "resnet34"
-RUN_NAME = "v2"
+RUN_NAME = "v3"
 
 BASE_PATH = "/home/scarrion/datasets/nn/vision/lungs_masks"
 print(BASE_PATH)
@@ -98,20 +98,32 @@ def main():
     # Vars
     images_dir = os.path.join(BASE_PATH, "images", "train")
     masks_dir = os.path.join(BASE_PATH, "masks", "train")
+    masks_valid_dir = os.path.join(BASE_PATH, "masks", "valid")
 
     # Get data by matching the filename (no basepath)
     images_files = set([f for f in os.listdir(images_dir)])
     masks_files = set([f for f in os.listdir(masks_dir)])
-    files = list(masks_files.intersection(images_files))
+    files = masks_files.intersection(images_files)
+
+    # Trick for valid files
+    # valid_files = set([f for f in os.listdir(masks_valid_dir)])
+    # files = list(files.intersection(valid_files))
+    # Remove in-valid masks
+    # for mask_id in masks_files:
+    #     if mask_id not in valid_files:
+    #         os.remove(os.path.join(BASE_PATH, "masks", "train", mask_id))
+
+    files = list(files)
     random.shuffle(files)  # Randomize
     print(f"Total Images+Masks: {len(files)}")
+
 
     # Get model + auxiliar functions
     with strategy.scope():
         model, preprocess_fn = utils.get_model(backbone=BACKBONE)
 
     # Datasets
-    tr_size = int(len(files)*0.8)
+    tr_size = int(len(files)*0.9)
     train_dataset = DatasetMasks(BASE_PATH, folder="train", files=files[:tr_size], da_fn=da_tr_fn(TARGET_SIZE, TARGET_SIZE), preprocess_fn=preprocess_fn)
     val_dataset = DatasetMasks(BASE_PATH, folder="train", files=files[tr_size:], da_fn=da_ts_fn(TARGET_SIZE, TARGET_SIZE), preprocess_fn=preprocess_fn)
 

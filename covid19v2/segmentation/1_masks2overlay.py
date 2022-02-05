@@ -8,12 +8,9 @@ import tensorflow as tf
 from segmentation_models.losses import bce_jaccard_loss
 from segmentation_models.metrics import iou_score
 
-import numpy as np
-from PIL import Image
-
 from covid19v2.segmentation.dataset import DatasetMasks
 from covid19v2.segmentation.da import da_ts_fn
-from covid19v2.segmentation import utils
+from covid19v2.segmentation import utils, plot
 
 # Variables
 TARGET_SIZE = 256
@@ -23,30 +20,6 @@ RUN_NAME = "v2"
 
 BASE_PATH = "/home/scarrion/datasets/nn/vision/lungs_masks"
 print(BASE_PATH)
-
-
-def masks2overlay(image, mask, output_path, file_id):
-    assert image.shape[:2] == mask.shape[:2]
-
-    # From 0-1 to 0-255
-    image = image.astype(np.uint8)
-    mask = ((mask > 0) * 255).astype(np.uint8)
-
-    # Convert to PIL
-    pil_img = Image.fromarray(image)
-    pil_mask = Image.fromarray(mask)
-
-    # Convert to RGBA
-    pil_img = pil_img.convert('RGBA')
-    pil_mask = pil_mask.convert('RGBA')
-
-    # Make the background transparent
-    pil_mask_alpha = utils.make_transparent(pil_mask, color=(0, 0, 0))
-    pil_mask_alpha.putalpha(75)
-
-    # Overlay mask and save image
-    overlaid_img = Image.alpha_composite(pil_img, pil_mask_alpha)
-    overlaid_img.save(os.path.join(output_path, file_id))
 
 
 def main():
@@ -71,7 +44,7 @@ def main():
     # Predicting images
     print("Overlaying images...")
     for i, (image, mask, _, _) in tqdm.tqdm(enumerate(dataset), total=len(dataset)):
-        masks2overlay(image=image, mask=mask, output_path=output_path, file_id=dataset.file_ids[i])
+        plot.masks2overlay(image=image, mask=mask, output_path=output_path, file_id=dataset.file_ids[i])
 
 
 if __name__ == "__main__":
