@@ -5,14 +5,8 @@ import numpy as np
 from PIL import Image
 from tensorflow import keras
 
+from covid19v2.segmentation.utils import force_2d
 
-def force_2d(img):
-    if len(img.shape) == 2:
-        return img
-    elif len(img.shape) == 3:
-        return img[:, :, 0]
-    else:
-        raise ValueError("Images must have either 2D or 3D")
 
 
 # classes for data loading and preprocessing

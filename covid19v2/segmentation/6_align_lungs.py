@@ -15,16 +15,16 @@ import tqdm
 from matplotlib import pyplot as plt
 import json
 from PIL import Image
+from skimage.exposure import equalize_adapthist
+from skimage import exposure
 
 from covid19v2.segmentation.da import da_ts_fn
+from covid19v2.preprocess.da import da_resize_pad_fn
 
 
 # Vars
-TARGET_SIZE = 256
-
 BASE_PATH = "/home/scarrion/datasets/nn/vision/lungs_masks"
 print(BASE_PATH)
-
 
 
 def read_img(filename):
@@ -117,16 +117,29 @@ def align_lungs(interest_regions, files, images_dir, output_path, margin_factor=
         interest_region = expand_bboxes(interest_region, margin_factor=margin_factor)
 
         # Read image
-        image = read_img(os.path.join(images_dir, file_id))
+        pil_img = Image.open(os.path.join(images_dir, file_id))
+
+        # Specific preprocessing
+        img = np.array(pil_img).astype(np.float)
+        img = exposure.rescale_intensity(img)  # x => [0.0, 1.0]
+        img = exposure.equalize_adapthist(img)
+        img = (img * 255).astype(np.uint8)
+
+        # Resize and padding
+        max_size = max(*img.shape)
+        da_fn = da_resize_pad_fn(max_size, max_size)
+        image = da_fn(image=img)['image']
         assert image.shape[0] == image.shape[1]
 
         # Crop
         x, y, w, h = [int(v * image.shape[0]) for v in interest_region[0]]
         image = image[y:y + h, x:x + w]
 
-        # Resize + pad
-        da_fn = da_ts_fn(TARGET_SIZE, TARGET_SIZE)
+        # Resize and padding
+        max_size = max(*image.shape)
+        da_fn = da_resize_pad_fn(max_size, max_size)
         image = da_fn(image=image)['image']
+        assert image.shape[0] == image.shape[1]
 
         # Save image
         pil_img_pred = Image.fromarray(image)
@@ -135,9 +148,9 @@ def align_lungs(interest_regions, files, images_dir, output_path, margin_factor=
 
 def main():
     # Vars
-    images_dir = os.path.join(BASE_PATH, "images", "2048")
+    images_dir = os.path.join(BASE_PATH, "images", "raw")
     bboxes_dir = os.path.join(BASE_PATH, "masks", "bboxes")
-    output_path = os.path.join(BASE_PATH, "images", f"aligned{TARGET_SIZE}")
+    output_path = os.path.join(BASE_PATH, "images", f"raw_aligned")
 
     # Get images
     files = set([f for f in os.listdir(images_dir)])

@@ -1,6 +1,14 @@
 import segmentation_models as sm
 from covid19v2.segmentation.da import preprocessing_fn
 
+def force_2d(img):
+    if len(img.shape) == 2:
+        return img
+    elif len(img.shape) == 3:
+        return img[:, :, 0]
+    else:
+        raise ValueError("Images must have either 2D or 3D")
+
 
 def get_model(backbone):
     if backbone == "resnet34":
