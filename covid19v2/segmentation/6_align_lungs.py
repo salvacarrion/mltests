@@ -23,6 +23,7 @@ from covid19v2.preprocess.da import da_resize_pad_fn
 
 
 # Vars
+PARTITION = "test"
 BASE_PATH = "/home/scarrion/datasets/nn/vision/lungs_masks"
 print(BASE_PATH)
 
@@ -148,9 +149,9 @@ def align_lungs(interest_regions, files, images_dir, output_path, margin_factor=
 
 def main():
     # Vars
-    images_dir = os.path.join(BASE_PATH, "images", "raw")
-    bboxes_dir = os.path.join(BASE_PATH, "masks", "bboxes")
-    output_path = os.path.join(BASE_PATH, "images", f"raw_aligned")
+    images_dir = os.path.join(BASE_PATH, "images", PARTITION, "raw")
+    bboxes_dir = os.path.join(BASE_PATH, "masks", PARTITION, "bboxes")
+    output_path = os.path.join(BASE_PATH, "images", PARTITION, f"raw_aligned")
 
     # Get images
     files = set([f for f in os.listdir(images_dir)])

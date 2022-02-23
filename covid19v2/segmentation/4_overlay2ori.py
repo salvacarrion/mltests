@@ -4,6 +4,7 @@ from pathlib import Path
 
 import tqdm
 
+PARTITION = "train"  # Use for the human-in-the-loop training
 BASE_PATH = "/home/scarrion/datasets/nn/vision/lungs_masks"
 print(BASE_PATH)
 
@@ -12,9 +13,9 @@ def main():
     # Vars
     base = "masks"
     name_dir = "perfs"
-    src_dir = os.path.join(BASE_PATH, base, name_dir)
-    dst_dir = os.path.join(BASE_PATH, base, name_dir + "_ori")
-    images_dir = os.path.join(BASE_PATH, base, "pred")
+    src_dir = os.path.join(BASE_PATH, PARTITION, base, name_dir)
+    dst_dir = os.path.join(BASE_PATH, PARTITION, base, name_dir + "_ori")
+    images_dir = os.path.join(BASE_PATH, PARTITION, base, "pred")
 
     # Create folders
     for dir_i in [dst_dir]:

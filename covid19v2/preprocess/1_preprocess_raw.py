@@ -1,5 +1,6 @@
 import collections
 import os
+from pathlib import Path
 
 import PIL.Image
 import tqdm
@@ -20,13 +21,15 @@ import numpy as np
 from skimage.exposure import equalize_adapthist
 
 # Variables
+IMAGE_SIZES = [256, 512]
+PARTITION = "test"
 BASE_PATH = "/home/scarrion/datasets/nn/vision/lungs_masks"
 print(BASE_PATH)
 
 
 def main():
     # Get data
-    df = pd.read_excel(os.path.join(BASE_PATH, "data", "data.xls"))
+    df = pd.read_excel(os.path.join(BASE_PATH, "data", f"{PARTITION}.xls"))
     print(f"Total images: {len(df)}")
 
     for i, row in tqdm.tqdm(df.iterrows(), total=len(df)):
@@ -34,7 +37,7 @@ def main():
         filename = row["ImageFile"]
 
         # Open ori image
-        ori_img_path = os.path.join(BASE_PATH, "images", "raw", filename)
+        ori_img_path = os.path.join(BASE_PATH, "images", PARTITION, "raw", filename)
         pil_img = Image.open(ori_img_path)
 
         # Specific preprocessing
@@ -49,13 +52,16 @@ def main():
         img = da_fn(image=img)['image']
 
         # Resize, padding and save
-        for image_size in [256, 512]:
+        for image_size in IMAGE_SIZES:
+            savepath = os.path.join(BASE_PATH, "images", PARTITION, str(image_size))
+            Path(savepath).mkdir(parents=True, exist_ok=True)
+
+            # Resize image
             pil_img = Image.fromarray(img)
             pil_img = pil_img.resize((image_size, image_size), PIL.Image.LANCZOS)
 
             # Save image
-            new_img_path = os.path.join(BASE_PATH, "images", str(image_size), filename)
-            pil_img.save(new_img_path)
+            pil_img.save(os.path.join(savepath, filename))
 
 
 if __name__ == "__main__":

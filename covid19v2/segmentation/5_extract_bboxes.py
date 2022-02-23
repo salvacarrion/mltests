@@ -15,6 +15,7 @@ import tqdm
 from matplotlib import pyplot as plt
 
 
+PARTITION = "test"
 BASE_PATH = "/home/scarrion/datasets/nn/vision/lungs_masks"
 print(BASE_PATH)
 
@@ -120,9 +121,9 @@ def process_masks(files, output_path, apply_otsu=True, draw_contours=True, thres
 
 def main():
     # Vars
-    masks_dir = os.path.join(BASE_PATH, "masks", "train")
-    masks_pred_dir = os.path.join(BASE_PATH, "masks", "pred")
-    output_path = os.path.join(BASE_PATH, "masks", "bboxes")
+    masks_dir = os.path.join(BASE_PATH, "masks", PARTITION, "bucket")
+    masks_pred_dir = os.path.join(BASE_PATH, "masks", PARTITION, "pred")
+    output_path = os.path.join(BASE_PATH, "masks", PARTITION, "bboxes")
 
     # Create folders
     for dir_i in [output_path]:

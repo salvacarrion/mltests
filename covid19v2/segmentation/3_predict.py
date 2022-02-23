@@ -21,6 +21,7 @@ sm.set_framework('tf.keras')
 sm.framework()
 
 # Variables
+PARTITION = "test"
 TARGET_SIZE = 256
 BATCH_SIZE = 128
 EPOCHS_STAGE1 = 2000
@@ -37,8 +38,8 @@ strategy = tf.distribute.MirroredStrategy()
 
 def predict(model, dataset, use_multiprocessing=False, workers=1):
     # Outputs
-    output_path = os.path.join(BASE_PATH, "masks", "pred")
-    output_overlay_path = os.path.join(BASE_PATH, "masks", "pred_overlay")
+    output_path = os.path.join(BASE_PATH, "masks", PARTITION, "pred")
+    output_overlay_path = os.path.join(BASE_PATH, "masks", PARTITION, "pred_overlay")
 
     # Create folders
     for dir_i in [output_path, output_overlay_path]:
@@ -65,8 +66,8 @@ def predict(model, dataset, use_multiprocessing=False, workers=1):
 
 def main():
     # Vars
-    images_dir = os.path.join(BASE_PATH, "images", "train")
-    masks_dir = os.path.join(BASE_PATH, "masks", "train")
+    images_dir = os.path.join(BASE_PATH, "images", PARTITION, str(TARGET_SIZE))
+    masks_dir = os.path.join(BASE_PATH, "masks", PARTITION, "bucket")
 
     # Get data by matching the filename (no basepath)
     images_files = set([f for f in os.listdir(images_dir)])
@@ -86,7 +87,7 @@ def main():
         model.summary()
 
     # Datasets
-    dataset = DatasetImages(BASE_PATH, folder="train", files=files, da_fn=da_ts_fn(TARGET_SIZE, TARGET_SIZE), preprocess_fn=preprocess_fn)
+    dataset = DatasetImages(BASE_PATH, folder=f"{PARTITION}/{str(TARGET_SIZE)}", files=files, da_fn=da_ts_fn(TARGET_SIZE, TARGET_SIZE), preprocess_fn=preprocess_fn)
 
     # Train
     predict(model, dataset)
